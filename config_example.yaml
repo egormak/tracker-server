@@ -1,0 +1,7 @@
+mongodb:
+  host: "10.200.0.1"
+  port: 27017
+  name: tasker
+telegram:
+  api_key: "TOKEN"
+  room_id: "ROOM_ID"
