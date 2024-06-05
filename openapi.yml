@@ -1,0 +1,298 @@
+openapi: 3.0.3
+info:
+  title: API Documentation
+  description: API documentation for the service
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /v1/rest-spend:
+    post:
+      summary: Spend rest time
+      operationId: RestSpend
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
+  /v1/rest-add:
+    post:
+      summary: Add rest time
+      operationId: RestAdd
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
+  /v1/rest-get:
+    get:
+      summary: Get rest time
+      operationId: RestGet
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  # Add your response schema here
+  /v1/timer/set:
+    post:
+      summary: Set a timer
+      operationId: TimerSet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
+  /v1/timer/get:
+    get:
+      summary: Get timer
+      operationId: TimerGet
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  # Add your response schema here
+  /v1/timer/del:
+    post:
+      summary: Delete a timer
+      operationId: TimerDel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
+  /v1/record:
+    post:
+      summary: Add a record
+      operationId: AddRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
+  /v1/record/task-day:
+    get:
+      summary: Get day task record
+      operationId: GetDayTaskRecord
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  # Add your response schema here
+  /v1/record/params:
+    post:
+      summary: Set task parameters
+      operationId: SetTaskParams
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
+    get:
+      summary: Get task parameters
+      operationId: GetTaskParams
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  # Add your response schema here
+  /v1/records:
+    get:
+      summary: Show all records
+      operationId: ShowRecords
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  # Add your response schema here
+  /v1/records/clean:
+    get:
+      summary: Clean records
+      operationId: CleanRecords
+      responses:
+        '200':
+          description: Successful operation
+  /v1/tasklist:
+    get:
+      summary: Show task list
+      operationId: ShowTaskList
+      responses:
+        '200':
+          description: Successful operation
+  /v1/task/plan-percent:
+    get:
+      summary: Get task plan percent
+      operationId: GetTaskPlanPercent
+      responses:
+        '200':
+          description: Successful operation
+  /v1/task/percent:
+    get:
+      summary: Get task day by percent
+      operationId: GetTaskDayByPercent
+      responses:
+        '200':
+          description: Successful operation
+  /v1/task/plan-percent/change:
+    get:
+      summary: Change group plan percent
+      operationId: ChangeGroupPlanPercent
+      responses:
+        '200':
+          description: Successful operation
+  /v1/roles/records:
+    get:
+      summary: Show roles records
+      operationId: ShowRolesRecords
+      responses:
+        '200':
+          description: Successful operation
+  /v1/roles/records/today:
+    get:
+      summary: Stat completion time done
+      operationId: StatCompletionTimeDone
+      responses:
+        '200':
+          description: Successful operation
+  /v1/role/recheck:
+    get:
+      summary: Recheck role
+      operationId: RecheckRole
+      responses:
+        '200':
+          description: Successful operation
+  /v1/role/get:
+    get:
+      summary: Get task role
+      operationId: TaskRoleGet
+      responses:
+        '200':
+          description: Successful operation
+  /v1/manage/procents:
+    post:
+      summary: Set procents
+      operationId: ProcentsSet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
+  /v1/manage/timer/recheck:
+    get:
+      summary: Recheck timer
+      operationId: TimerRecheck
+      responses:
+        '200':
+          description: Successful operation
+  /v1/manage/timer/global:
+    post:
+      summary: Set global timer
+      operationId: TimerGlobalSet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
+    get:
+      summary: Get global timer
+      operationId: TimerGlobalGet
+      responses:
+        '200':
+          description: Successful operation
+  /v1/manage/telegram/start:
+    post:
+      summary: Start telegram send
+      operationId: TelegramSendStart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
+  /v1/manage/telegram/stop:
+    post:
+      summary: Stop telegram send
+      operationId: TelegramSendStop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                # Add your request body schema here
+      responses:
+        '200':
+          description: Successful operation
