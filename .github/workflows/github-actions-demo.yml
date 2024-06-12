@@ -19,5 +19,5 @@ jobs:
     - name: Login to Github Registry
       run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u USERNAME --password-stdin
     - name: Push the Docker image
-      run: docker push egorm/tracker-server:$(date +%+4Y-%m-%d)
+      run: docker push ghcr.io/tracker-server/tracker-server:$(date +%+4Y-%m-%d)
       
