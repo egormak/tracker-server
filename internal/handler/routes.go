@@ -21,9 +21,13 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	api := app.Group("/api")
 
+	// Rest
+	api.Post("/v1/rest/add", restHandler.RestAdd)
+
 	// General
+
 	api.Post("/v1/rest-spend", restHandler.RestSpend)
-	api.Post("/v1/rest-add", restHandler.RestAdd)
+
 	api.Get("/v1/rest-get", restHandler.RestGet)
 	api.Post("/v1/timer/set", manageHandler.TimerSet)
 	api.Get("/v1/timer/get", manageHandler.TimerGet)
