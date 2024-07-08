@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 	"tracker-server/internal/notify"
-	"tracker-server/internal/service"
 	"tracker-server/internal/storage"
 
 	log "github.com/sirupsen/logrus"
@@ -137,15 +136,13 @@ func (r *Record) AddRecord(c *fiber.Ctx) error {
 		})
 	}
 
-	if service.IsWeekendNow() || taskRole != "rest" {
-		if err := r.st.AddRest(body.TimeDone); err != nil {
-			errMsg := fmt.Errorf("can't add rest: %s", err)
-			log.Error(errMsg)
-			return c.Status(500).JSON(&fiber.Map{
-				"status":  "error",
-				"message": errMsg.Error(),
-			})
-		}
+	if err := r.st.AddRest(body.TimeDone); err != nil {
+		errMsg := fmt.Errorf("can't add rest: %s", err)
+		log.Error(errMsg)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": errMsg.Error(),
+		})
 	}
 
 	log.Info("Record was added")
