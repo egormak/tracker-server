@@ -5,6 +5,7 @@ import (
 	"tracker-server/internal/handler/record"
 	"tracker-server/internal/handler/rest"
 	"tracker-server/internal/handler/role"
+	"tracker-server/internal/handler/statistic"
 	"tracker-server/internal/handler/welcome"
 	"tracker-server/internal/notify"
 	"tracker-server/internal/storage"
@@ -18,11 +19,14 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	recordHandler := record.New(mongoconn, notify)
 	roleHandler := role.New(mongoconn, notify)
 	manageHandler := manage.New(mongoconn, notify)
+	statsHandler := statistic.New(mongoconn)
 
 	api := app.Group("/api")
 
 	// Rest
 	api.Post("/v1/rest/add", restHandler.RestAdd)
+	// Statistics
+	api.Get("/v1/stats/done", statsHandler.StatCompletionTimeDone)
 
 	// General
 
