@@ -42,3 +42,45 @@ docker run -d -p 8080:3000 --name tracker  --network=tracker -v /etc/tracker/con
 
 # Notes
 In config file was set MongoDB Docker ip-address
+
+# Base structure
+```
+TaskTimeRecord/
+├── cmd/
+│   └── server/
+│       └── main.go
+├── internal/
+│   ├── api/
+│   │   ├── handlers/
+│   │   │   └── task_handler.go
+│   │   ├── middlewares/
+│   │   │   └── auth_middleware.go
+│   │   └── routes/
+│   │       └── routes.go
+│   ├── config/
+│   │   └── config.go
+│   ├── models/
+│   │   └── task.go
+│   ├── repository/
+│   │   └── mongodb/
+│   │       └── task_repository.go
+│   ├── services/
+│   │   ├── task_service.go
+│   │   └── notification_service.go
+│   └── utils/
+│       └── logger.go
+├── pkg/
+│   └── telegram/
+│       └── client.go
+├── scripts/
+│   └── db_init.go
+├── tests/
+│   ├── integration/
+│   │   └── api_test.go
+│   └── unit/
+│       └── task_service_test.go
+├── .gitignore
+├── go.mod
+├── go.sum
+└── README.md
+```

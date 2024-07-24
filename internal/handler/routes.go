@@ -26,7 +26,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Rest
 	api.Post("/v1/rest/add", restHandler.RestAdd)
 	// Statistics
-	api.Get("/v1/stats/done", statsHandler.StatCompletionTimeDone)
+	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone)
 
 	// General
 
