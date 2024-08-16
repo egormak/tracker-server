@@ -1,25 +1,26 @@
-package handler
+package routes
 
 import (
+	"tracker-server/internal/api/handler"
 	"tracker-server/internal/handler/manage"
 	"tracker-server/internal/handler/record"
 	"tracker-server/internal/handler/rest"
 	"tracker-server/internal/handler/role"
-	"tracker-server/internal/handler/statistic"
 	"tracker-server/internal/handler/welcome"
 	"tracker-server/internal/notify"
+	"tracker-server/internal/services"
 	"tracker-server/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify) {
+func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify, service services.Services) {
 
 	restHandler := rest.New(mongoconn, notify)
 	recordHandler := record.New(mongoconn, notify)
 	roleHandler := role.New(mongoconn, notify)
 	manageHandler := manage.New(mongoconn, notify)
-	statsHandler := statistic.New(mongoconn)
+	statsHandler := handler.NewStatistic(mongoconn)
 
 	api := app.Group("/api")
 
