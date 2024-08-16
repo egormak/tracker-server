@@ -2,27 +2,30 @@ package handler
 
 import (
 	"log/slog"
-	"tracker-server/internal/options"
-	"tracker-server/internal/storage"
+	"tracker-server/internal/domain/entity"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-type StatisticHandler struct {
-	srv services.StatisticService
+type StatisticService interface {
+	GetTaskRecordToday() ([]entity.TaskResult, error)
 }
 
-func NewStatistic(st storage.Storage) *Statistic {
-	return &Statistic{st: st}
+type StatisticHandler struct {
+	srv StatisticService
+}
+
+func NewStatisticHandler(srv StatisticService) *StatisticHandler {
+	return &StatisticHandler{srv: srv}
 }
 
 // TODO: Finish this function
-func (s *Statistic) StatCompletionTimeDone(c *fiber.Ctx) error {
+func (s *StatisticHandler) StatCompletionTimeDone(c *fiber.Ctx) error {
 	slog.Info("Get request StatCompletionTimeDone")
 
 	// var answer StatisticCompletion
 
-	statsData, err := s.st.GetTaskRecordToday(options.WithCheckBusinessDay(true))
+	statsData, err := s.srv.GetTaskRecordToday()
 	if err != nil {
 		return c.Status(500).JSON(&fiber.Map{
 			"status":  "error",
@@ -32,5 +35,4 @@ func (s *Statistic) StatCompletionTimeDone(c *fiber.Ctx) error {
 
 	return c.Status(200).JSON(statsData)
 
-	return c.SendString("Hello, World!")
 }

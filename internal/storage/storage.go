@@ -30,6 +30,6 @@ type Storage interface {
 	DelGroupPercent(groupPlan string) error
 	GetTaskNamePlanPercent(groupPlan string, groupPercent int) (string, error)
 	GetGroupName(groupNameOrdinal int) (string, error)
-	GetTaskRecordToday(opts ...TaskRecordOption) ([]TaskRecord, error)
+	// GetTaskRecordToday(opts ...TaskRecordOption) ([]TaskRecord, error)
 	// WithCheckBusinessDay(check bool) TaskRecordOption
 }

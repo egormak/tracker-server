@@ -14,13 +14,15 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify, service services.Services) {
+func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify) {
+
+	taskService := services.NewService(mongoconn, notify)
 
 	restHandler := rest.New(mongoconn, notify)
 	recordHandler := record.New(mongoconn, notify)
 	roleHandler := role.New(mongoconn, notify)
 	manageHandler := manage.New(mongoconn, notify)
-	statsHandler := handler.NewStatistic(mongoconn)
+	statsHandler := handler.NewStatisticHandler(taskService)
 
 	api := app.Group("/api")
 

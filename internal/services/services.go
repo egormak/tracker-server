@@ -5,11 +5,11 @@ import (
 	"tracker-server/internal/storage"
 )
 
-type ServicesInt interface {
-	StatCompletionTimeDone() ([]storage.TaskRecord, error)
-}
-
 type Service struct {
 	st storage.Storage
 	nt notify.Notify
+}
+
+func NewService(st storage.Storage, nt notify.Notify) *Service {
+	return &Service{st: st, nt: nt}
 }

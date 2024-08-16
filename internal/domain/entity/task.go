@@ -6,3 +6,11 @@ type TaskRecord struct {
 	TimeDuration int
 	Date         string
 }
+
+type TaskResult struct {
+	Name         string `json:"name"`
+	Role         string `json:"role"`
+	TimeDuration int    `json:"time_duration"`
+	TimeDone     int    `json:"time_done"`
+	Priority     int    `json:"priority"`
+}

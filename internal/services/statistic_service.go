@@ -1,7 +1,11 @@
 package services
 
-import "tracker-server/internal/storage"
+import "tracker-server/internal/domain/entity"
 
-func (s *Service) StatCompletionTimeDone() ([]storage.TaskRecord, error) {
-	return s.st.GetTaskRecordToday()
+// func (s *Service) StatCompletionTimeDone() ([]storage.TaskRecord, error) {
+// 	return s.srv.GetTaskRecordToday()
+// }
+
+func (s *Service) GetTaskRecordToday() ([]entity.TaskResult, error) {
+	return []entity.TaskResult{}, nil
 }
