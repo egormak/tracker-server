@@ -1,5 +1,7 @@
 package storage
 
+import "tracker-server/internal/domain/entity"
+
 type Storage interface {
 	RestSpend(restTime int) error
 	GetRecords() ([]TaskRecord, error)
@@ -17,8 +19,8 @@ type Storage interface {
 	TimerGlobalSet(timeScheduler int) error
 	TimerGlobalGet() (int, error)
 	TimeDurationGet() (int, error)
-	AddTaskRecord(task TaskRecord) error
-	AddRoleMinutes(task TaskRecord) error
+	AddTaskRecord(task entity.TaskRecord) error
+	AddRoleMinutes(task entity.TaskRecord) error
 	GetRole(taskName string) (string, error)
 	AddRest(restTime int) error
 	GetRest() (int, error)

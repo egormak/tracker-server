@@ -3,6 +3,7 @@ package record
 import (
 	"fmt"
 	"time"
+	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/notify"
 	"tracker-server/internal/storage"
 
@@ -111,7 +112,7 @@ func (r *Record) AddRecord(c *fiber.Ctx) error {
 		})
 	}
 
-	record := storage.TaskRecord{
+	record := entity.TaskRecord{
 		Name:         body.TaskName,
 		Role:         taskRole,
 		TimeDuration: body.TimeDone,

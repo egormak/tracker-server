@@ -3,6 +3,7 @@ package mongo
 import (
 	"fmt"
 	"time"
+	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/storage"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -57,7 +58,7 @@ func (s *Storage) CleanRecords() {
 }
 
 // AddTaskRecord adds a task record to the storage.
-func (s *Storage) AddTaskRecord(task storage.TaskRecord) error {
+func (s *Storage) AddTaskRecord(task entity.TaskRecord) error {
 	// Get the database
 	database := s.Client.Database(dbName)
 

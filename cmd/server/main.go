@@ -30,11 +30,12 @@ func main() {
 
 	// Init DataBase
 	mongoUri := fmt.Sprintf("mongodb://%s:%s/", cfg.MongoDB.Host, cfg.MongoDB.Port)
-	// Old
+
 	mongoconn, err := mongo.New(ctx, mongoUri)
 	if err != nil {
-		slog.Error("main error", "error", err)
+		slog.Error("Can't connect to mongo", "error", err)
 		os.Exit(1)
+
 	}
 	notify := telegram.TelegramNew(cfg.Telegram.APIKey, cfg.Telegram.RoomID)
 

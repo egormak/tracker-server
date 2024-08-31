@@ -3,6 +3,7 @@ package mongo
 import (
 	"fmt"
 	"time"
+	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/storage"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -71,7 +72,7 @@ func (s *Storage) RecheckRole() error {
 	defer cursor.Close(s.Context)
 
 	for cursor.Next(s.Context) {
-		var result storage.TaskRecord
+		var result entity.TaskRecord
 		if err := cursor.Decode(&result); err != nil {
 			return err
 		}
@@ -83,7 +84,7 @@ func (s *Storage) RecheckRole() error {
 	return nil
 }
 
-func (s *Storage) AddRoleMinutes(t storage.TaskRecord) error {
+func (s *Storage) AddRoleMinutes(t entity.TaskRecord) error {
 	// Set Value for DB
 	// client := dbClient.Client
 	// ctx := dbClient.Context
@@ -168,7 +169,7 @@ func (s *Storage) GetRole(taskName string) (string, error) {
 	coll := database.Collection(taskNamesList)
 
 	// Find the task configuration in the collection
-	var result storage.TaskConfig
+	var result entity.TaskConfig
 	err := coll.FindOne(s.Context, bson.D{{"name", taskName}}).Decode(&result)
 	if err != nil {
 		// Return an error if the task configuration is not found

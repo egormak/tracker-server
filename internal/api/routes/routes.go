@@ -17,14 +17,23 @@ import (
 func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify) {
 
 	taskService := services.NewService(mongoconn, notify)
+	taskRecordService := services.NewTaskRecordService(mongoconn)
+
+	// TaskRecords
+	taskRecordHandler := handler.NewTaskRecordHandler(taskRecordService)
+
+	// Statistics
+	statsHandler := handler.NewStatisticHandler(taskService)
 
 	restHandler := rest.New(mongoconn, notify)
 	recordHandler := record.New(mongoconn, notify)
 	roleHandler := role.New(mongoconn, notify)
 	manageHandler := manage.New(mongoconn, notify)
-	statsHandler := handler.NewStatisticHandler(taskService)
 
 	api := app.Group("/api")
+
+	// TaskRecords
+	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
 
 	// Rest
 	api.Post("/v1/rest/add", restHandler.RestAdd)
