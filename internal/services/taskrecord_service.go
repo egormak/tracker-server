@@ -22,9 +22,9 @@ func NewTaskRecordService(st Storage) *TaskRecordService {
 	return &TaskRecordService{st: st}
 }
 
-func (s *TaskRecordService) AddRecord(taskRecord entity.TaskRecordRequest) error {
+func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest) error {
 
-	taskRole, err := s.st.GetRole(taskRecord.TaskName)
+	taskRole, err := s.st.GetRole(taskRecordRequest.TaskName)
 	if err != nil {
 		errMsg := fmt.Errorf("task role can't get: %s", err)
 		slog.Error("task_record_service, add_record:get_role", "err", errMsg)
@@ -32,9 +32,9 @@ func (s *TaskRecordService) AddRecord(taskRecord entity.TaskRecordRequest) error
 	}
 
 	record := entity.TaskRecord{
-		Name:         taskRecord.TaskName,
+		Name:         taskRecordRequest.TaskName,
 		Role:         taskRole,
-		TimeDuration: taskRecord.TimeDone,
+		TimeDuration: taskRecordRequest.TimeDone,
 		Date:         time.Now().Format("2 January 2006"),
 	}
 
