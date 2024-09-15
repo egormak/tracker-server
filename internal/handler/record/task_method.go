@@ -15,6 +15,12 @@ func (r *Record) GetTaskDayByPercent(c *fiber.Ctx) error {
 			"message": err.Error(),
 		})
 	}
+	if err := r.st.CheckIfPlanPercentEmpty(); err != nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
 	taskNamePlanByPercent, err := r.st.GetTaskNamePlanPercent("plan", percent)
 	if err != nil {
 		return c.Status(500).JSON(&fiber.Map{

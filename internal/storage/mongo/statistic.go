@@ -9,22 +9,15 @@ import (
 )
 
 // GetTaskRecordToday retrieves task records for the current day from MongoDB
-func (s *Storage) GetTaskRecordToday(opts ...storage.TaskRecordOption) ([]storage.TaskRecord, error) {
-	// Initialize default options
-	options := &storage.TaskRecordOptions{
-		CheckBusinessDay: false,
-	}
+func (s *Storage) GetTaskRecordToday() ([]storage.TaskRecord, error) {
 
-	// Apply provided options
-	for _, opt := range opts {
-		opt(options)
-	}
+	today := time.Now().Format("2 January 2006")
 
 	// Get the database and collection
 	coll := s.Client.Database(dbName).Collection(tasksList)
 
 	// Create the filter based on the provided options
-	filter := createFilter(options)
+	filter := bson.M{"date": today}
 
 	// Find all records matching the filter
 	cursor, err := coll.Find(s.Context, filter)
@@ -40,16 +33,4 @@ func (s *Storage) GetTaskRecordToday(opts ...storage.TaskRecordOption) ([]storag
 	}
 
 	return result, nil
-}
-
-// createFilter generates the appropriate BSON filter based on the provided options
-func createFilter(opts *storage.TaskRecordOptions) bson.M {
-	today := time.Now().Format("2 January 2006")
-	filter := bson.M{"date": today}
-
-	if opts.CheckBusinessDay {
-		filter["role"] = bson.M{"$ne": "rest"}
-	}
-
-	return filter
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"tracker-server/internal/handler"
+	"tracker-server/internal/api/routes"
 	"tracker-server/internal/notify/telegram"
 	"tracker-server/internal/storage/mongo"
 
@@ -30,10 +30,12 @@ func main() {
 
 	// Init DataBase
 	mongoUri := fmt.Sprintf("mongodb://%s:%s/", cfg.MongoDB.Host, cfg.MongoDB.Port)
+
 	mongoconn, err := mongo.New(ctx, mongoUri)
 	if err != nil {
-		slog.Error("main error", "error", err)
+		slog.Error("Can't connect to mongo", "error", err)
 		os.Exit(1)
+
 	}
 	notify := telegram.TelegramNew(cfg.Telegram.APIKey, cfg.Telegram.RoomID)
 
@@ -41,7 +43,7 @@ func main() {
 	// Use the logger middleware
 	app.Use(logger.New(logger.Config{}))
 
-	handler.RegisterRoutes(app, mongoconn, notify)
+	routes.RegisterRoutes(app, mongoconn, notify)
 
 	// Start the server
 	log.Fatal(app.Listen(":3000"))

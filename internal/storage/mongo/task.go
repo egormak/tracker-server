@@ -56,23 +56,6 @@ func (s *Storage) CleanRecords() {
 
 }
 
-// AddTaskRecord adds a task record to the storage.
-func (s *Storage) AddTaskRecord(task storage.TaskRecord) error {
-	// Get the database
-	database := s.Client.Database(dbName)
-
-	// Get the collection
-	coll := database.Collection(tasksList)
-
-	// Insert the task record into the collection
-	_, err := coll.InsertOne(s.Context, task)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (s *Storage) ShowTaskList() ([]storage.TaskResult, error) {
 
 	var taskConfigs []storage.TaskConfig
