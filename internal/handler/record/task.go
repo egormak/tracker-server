@@ -25,6 +25,12 @@ func (r *Record) GetTaskPlanPercent(c *fiber.Ctx) error {
 		GroupPercent, err = r.st.GetGroupPercent(GroupPlanOrdinal)
 		if err != nil {
 			if err == storage.ErrListEmpty {
+				if err := r.st.CheckIfPlanPercentEmpty(); err != nil {
+					return c.Status(404).JSON(&fiber.Map{
+						"status":  "status",
+						"message": err.Error(),
+					})
+				}
 				r.st.ChangeGroupPlanPercent(GroupPlanOrdinal)
 			} else {
 				return c.Status(500).JSON(&fiber.Map{
@@ -50,12 +56,6 @@ func (r *Record) GetTaskPlanPercent(c *fiber.Ctx) error {
 		if TaskNamePlanPercent != "" {
 			break
 		} else if TaskNamePlanPercent == "" {
-			if err := r.st.CheckIfPlanPercentEmpty(); err != nil {
-				return c.Status(404).JSON(&fiber.Map{
-					"status":  "status",
-					"message": err.Error(),
-				})
-			}
 			if err := r.st.DelGroupPercent(groupName); err != nil {
 				return c.Status(500).JSON(&fiber.Map{
 					"status":  "error",

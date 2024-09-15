@@ -254,17 +254,10 @@ func (s *Storage) CheckIfPlanPercentEmpty() error {
 		return fmt.Errorf("check-if-plan-percent-empty error in findone: %s", err)
 	}
 
-	emptyBool := true
-
-	for _, v := range procentM.Plans {
-		if v != "" {
-			emptyBool = false
-		}
-	}
-
-	if emptyBool {
+	if len(procentM.Rest) == 0 && len(procentM.Learn) == 0 && len(procentM.Work) == 0 && len(procentM.Plan) == 0 {
 		return storage.ErrListEmpty
-	}
 
-	return nil
+	} else {
+		return nil
+	}
 }
