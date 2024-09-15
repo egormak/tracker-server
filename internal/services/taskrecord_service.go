@@ -7,7 +7,7 @@ import (
 	"tracker-server/internal/domain/entity"
 )
 
-type Storage interface {
+type TaskRecordStorage interface {
 	GetRole(taskName string) (string, error)
 	AddTaskRecord(task entity.TaskRecord) error
 	AddRoleMinutes(task entity.TaskRecord) error
@@ -15,10 +15,10 @@ type Storage interface {
 }
 
 type TaskRecordService struct {
-	st Storage
+	st TaskRecordStorage
 }
 
-func NewTaskRecordService(st Storage) *TaskRecordService {
+func NewTaskRecordService(st TaskRecordStorage) *TaskRecordService {
 	return &TaskRecordService{st: st}
 }
 

@@ -4,7 +4,6 @@ import (
 	"tracker-server/internal/api/handler"
 	"tracker-server/internal/handler/manage"
 	"tracker-server/internal/handler/record"
-	"tracker-server/internal/handler/rest"
 	"tracker-server/internal/handler/role"
 	"tracker-server/internal/handler/welcome"
 	"tracker-server/internal/notify"
@@ -19,26 +18,31 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Services
 	taskService := services.NewService(mongoconn, notify)
 	taskRecordService := services.NewTaskRecordService(mongoconn)
+	restService := services.NewRestService(mongoconn)
 
 	// Handlers
 	// TaskRecords
 	taskRecordHandler := handler.NewTaskRecordHandler(taskRecordService)
+	// Rest
+	restHandler := handler.NewRestHandler(restService)
 	// Statistics
 	statsHandler := handler.NewStatisticHandler(taskService)
 
-	restHandler := rest.New(mongoconn, notify)
+	// Routes
+	api := app.Group("/api")
+	// TaskRecords
+	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
+	// Rest
+	api.Post("/v1/rest/add", restHandler.RestAdd)
+
+	// Review
+
 	recordHandler := record.New(mongoconn, notify)
 	roleHandler := role.New(mongoconn, notify)
 	manageHandler := manage.New(mongoconn, notify)
 
-	api := app.Group("/api")
-
 	// Routes
-	// TaskRecords
-	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
 
-	// Rest
-	api.Post("/v1/rest/add", restHandler.RestAdd)
 	// Statistics
 	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone)
 
