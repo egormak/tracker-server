@@ -237,3 +237,34 @@ func (s *Storage) getDatePlanPercent() (string, error) {
 
 	return procentM.Date, nil
 }
+
+func (s *Storage) CheckIfPlanPercentEmpty() error {
+
+	database := s.Client.Database(dbName)
+	coll := database.Collection(taskInfo)
+
+	var procentM storage.Procents
+	err := coll.FindOne(s.Context, bson.M{"title": procentDocName}).Decode(&procentM)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// Return an error if there was a problem finding the document
+			return storage.ErrListEmpty
+		}
+		// Return an error if there was a problem finding the document
+		return fmt.Errorf("check-if-plan-percent-empty error in findone: %s", err)
+	}
+
+	emptyBool := true
+
+	for _, v := range procentM.Plans {
+		if v != "" {
+			emptyBool = false
+		}
+	}
+
+	if emptyBool {
+		return storage.ErrListEmpty
+	}
+
+	return nil
+}
