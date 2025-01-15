@@ -32,6 +32,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api := app.Group("/api")
 	// TaskRecords
 	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
+	// api.Get("/v1/task/next", taskRecordHandler.TasksNext)
+	api.Get("/v1/task/plan/percent", taskRecordHandler.GetTaskPlanPercent)
 	// Rest
 	api.Post("/v1/rest/add", restHandler.RestAdd)
 

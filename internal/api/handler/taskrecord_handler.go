@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"log/slog"
 	"tracker-server/internal/domain/entity"
+	"tracker-server/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 type taskRecordService interface {
 	AddRecord(body entity.TaskRecordRequest) error
+	// GetTasksNext() (entity.TasksNextResponse, error)
+	GetTaskPlanPercent() (entity.PlanPercentResponse, error)
 }
 
 type TaskRecordHandler struct {
@@ -66,4 +69,24 @@ func (t *TaskRecordHandler) AddRecord(c *fiber.Ctx) error {
 		"status":  "accept",
 		"message": "Record was added",
 	})
+}
+
+func (t *TaskRecordHandler) GetTaskPlanPercent(c *fiber.Ctx) error {
+	slog.Info("Get request GetTaskPlanPercent")
+
+	answer, err := t.srv.GetTaskPlanPercent()
+	if err != nil {
+		statusCode := 500
+		if err == storage.ErrAllEmpty {
+			statusCode = 404
+		}
+		slog.Error("Error getting task plan percent", "err", err)
+		return c.Status(statusCode).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	slog.Info("Sent answer", "request", "GetTaskPlanPercent", "answer", answer)
+	return c.Status(200).JSON(answer)
 }

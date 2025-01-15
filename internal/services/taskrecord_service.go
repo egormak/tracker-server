@@ -12,6 +12,15 @@ type TaskRecordStorage interface {
 	AddTaskRecord(task entity.TaskRecord) error
 	AddRoleMinutes(task entity.TaskRecord) error
 	AddRest(restTime int) error
+	GetGroupPlanPercent() (int, error)
+	GetGroupPercent(groupPlanOrdinal int) (int, error)
+	CheckIfPlanPercentEmpty() error
+	ChangeGroupPlanPercent(groupPlanOrdinal int) error
+	GetGroupName(groupPlanOrdinal int) (string, error)
+	GetTaskNamePlanPercent(groupName string, groupPercent int) (string, error)
+	DelGroupPercent(groupName string) error
+	GetTodayTaskDuration(taskName string) (int, error)
+	GetTaskParams(taskName string) (entity.TaskParams, error)
 }
 
 type TaskRecordService struct {
@@ -57,4 +66,32 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 	}
 
 	return nil
+}
+
+// func (s *TaskRecordService) GetTasksNext() (entity.TasksNextResponse, error) {
+// 	return entity.TasksNextResponse{}, nil
+// }
+
+// GetTodayTaskTimeLeft calculates the remaining time for a task for today
+func (s *TaskRecordService) GetTodayTaskTimeLeft(taskName string) (int, error) {
+	// Retrieve today's task duration
+	timeDuration, err := s.st.GetTodayTaskDuration(taskName)
+	if err != nil {
+		errMsg := fmt.Errorf("unable to retrieve today's task duration: %s", err)
+		slog.Error("task_record_service, get_today_task_left:get_today_task_duration", "err", errMsg)
+		return 0, errMsg
+	}
+
+	// Retrieve task parameters
+	taskParams, err := s.st.GetTaskParams(taskName)
+	if err != nil {
+		errMsg := fmt.Errorf("unable to retrieve task parameters: %s", err)
+		slog.Error("task_record_service, get_today_task_left:get_task_params", "err", errMsg)
+		return 0, errMsg
+	}
+
+	// Calculate the remaining time for the task
+	taskTimeLeft := taskParams.Time - timeDuration
+
+	return taskTimeLeft, nil
 }

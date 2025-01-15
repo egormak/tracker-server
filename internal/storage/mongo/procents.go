@@ -255,7 +255,7 @@ func (s *Storage) CheckIfPlanPercentEmpty() error {
 	}
 
 	if len(procentM.Rest) == 0 && len(procentM.Learn) == 0 && len(procentM.Work) == 0 && len(procentM.Plan) == 0 {
-		return storage.ErrListEmpty
+		return storage.ErrAllEmpty
 
 	} else {
 		return nil

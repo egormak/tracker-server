@@ -27,3 +27,16 @@ type TaskConfig struct {
 	TimeSchedule int
 	Priority     int
 }
+
+type TaskParams struct {
+	Name     string
+	Time     int
+	Priority int
+}
+
+// WebResponse is a struct for response
+type PlanPercentResponse struct {
+	TaskName string `json:"task_name"`
+	Percent  int    `json:"percent"`
+	TimeLeft int    `json:"time_left"`
+}
