@@ -21,12 +21,6 @@ type TaskConfig struct {
 	Priority     int
 }
 
-type TaskParams struct {
-	Name     string
-	Time     int
-	Priority int
-}
-
 type TaskResult struct {
 	Name         string `json:"name"`
 	Role         string `json:"role"`

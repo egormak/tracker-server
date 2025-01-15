@@ -3,6 +3,7 @@ package mongo
 import (
 	"fmt"
 	"time"
+	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/storage"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -79,7 +80,7 @@ func (s *Storage) ShowTaskList() ([]storage.TaskResult, error) {
 	}
 
 	for _, taskData := range taskConfigs {
-		timeDuration, err := s.TaskRecordTimeTodayGetDB(taskData.Name)
+		timeDuration, err := s.GetTodayTaskDuration(taskData.Name)
 		if err != nil {
 			return nil, fmt.Errorf("show-task-list: %w", err)
 		}
@@ -96,7 +97,7 @@ func (s *Storage) ShowTaskList() ([]storage.TaskResult, error) {
 
 }
 
-func (s *Storage) TaskRecordTimeTodayGetDB(taskName string) (int, error) {
+func (s *Storage) GetTodayTaskDuration(taskName string) (int, error) {
 
 	// Select Value
 	var timeDuretion int
@@ -107,7 +108,7 @@ func (s *Storage) TaskRecordTimeTodayGetDB(taskName string) (int, error) {
 	// Get Information about tasks
 	cursor_task, err := coll.Find(s.Context, bson.M{"name": taskName, "date": time.Now().Format("2 January 2006")})
 	if err != nil {
-		return 0, fmt.Errorf("task-record-time-today-get-db: %w", err)
+		return 0, fmt.Errorf("get-today-task-duration: %w", err)
 	}
 	defer cursor_task.Close(s.Context)
 
@@ -116,7 +117,7 @@ func (s *Storage) TaskRecordTimeTodayGetDB(taskName string) (int, error) {
 		var result storage.TaskRecord
 		err := cursor_task.Decode(&result)
 		if err != nil {
-			return 0, fmt.Errorf("task-record-time-today-get-db: %w", err)
+			return 0, fmt.Errorf("get-today-task-duration: %w", err)
 		}
 		timeDuretion += result.TimeDuration
 	}
@@ -124,7 +125,7 @@ func (s *Storage) TaskRecordTimeTodayGetDB(taskName string) (int, error) {
 
 }
 
-func (s *Storage) SetTaskParams(params storage.TaskParams) error {
+func (s *Storage) SetTaskParams(params entity.TaskParams) error {
 
 	var result storage.TaskConfig
 
@@ -152,7 +153,7 @@ func (s *Storage) SetTaskParams(params storage.TaskParams) error {
 	return nil
 }
 
-func (s *Storage) GetTaskParams(taskName string) (storage.TaskParams, error) {
+func (s *Storage) GetTaskParams(taskName string) (entity.TaskParams, error) {
 
 	// Set Value for DB
 	database := s.Client.Database(dbName)
@@ -162,14 +163,14 @@ func (s *Storage) GetTaskParams(taskName string) (storage.TaskParams, error) {
 	var result storage.TaskConfig
 	err := coll.FindOne(s.Context, bson.D{{"name", taskName}}).Decode(&result)
 	if err == mongo.ErrNoDocuments {
-		return storage.TaskParams{}, fmt.Errorf("get-task-params: %w", mongo.ErrNoDocuments)
+		return entity.TaskParams{}, fmt.Errorf("get-task-params: %w", mongo.ErrNoDocuments)
 	}
 
 	if result.Date != time.Now().Format("2 January 2006") {
-		return storage.TaskParams{}, storage.ErrParamsOld
+		return entity.TaskParams{}, storage.ErrParamsOld
 	}
 
-	return storage.TaskParams{
+	return entity.TaskParams{
 		Name:     result.Name,
 		Time:     result.TimeSchedule,
 		Priority: result.Priority,

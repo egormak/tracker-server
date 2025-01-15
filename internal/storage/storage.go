@@ -9,8 +9,8 @@ type Storage interface {
 	StatisticRolesGet() ([]RoleRecord, error)
 	StatisticRolesGetToday() ([]RoleRecord, error)
 	ShowTaskList() ([]TaskResult, error)
-	SetTaskParams(params TaskParams) error
-	GetTaskParams(taskName string) (TaskParams, error)
+	SetTaskParams(params entity.TaskParams) error
+	GetTaskParams(taskName string) (entity.TaskParams, error)
 	RecheckRole() error
 	CleanRecords()
 	TimeListSetDB(count int) error

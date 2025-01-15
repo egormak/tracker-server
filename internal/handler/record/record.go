@@ -193,7 +193,7 @@ func (r *Record) SetTaskParams(c *fiber.Ctx) error {
 		})
 	}
 
-	taskParams := storage.TaskParams{
+	taskParams := entity.TaskParams{
 		Name:     body.Name,
 		Time:     body.TimeDuration,
 		Priority: body.Priority,
