@@ -16,20 +16,32 @@ import (
 func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify) {
 
 	// Services
-	taskService := services.NewService(mongoconn, notify)
+	taskService := services.NewTaskService(mongoconn, notify)
 	taskRecordService := services.NewTaskRecordService(mongoconn)
 	restService := services.NewRestService(mongoconn)
+	statsService := services.NewStatisticService(mongoconn)
 
 	// Handlers
+	// Task
+	taskHandler := handler.NewTaskHandler(taskService)
 	// TaskRecords
 	taskRecordHandler := handler.NewTaskRecordHandler(taskRecordService)
 	// Rest
 	restHandler := handler.NewRestHandler(restService)
 	// Statistics
-	statsHandler := handler.NewStatisticHandler(taskService)
+	statsHandler := handler.NewStatisticHandler(statsService)
+
+	// OLD Logic
+	recordHandler := record.New(mongoconn, notify)
+	roleHandler := role.New(mongoconn, notify)
+	manageHandler := manage.New(mongoconn, notify)
+	//
 
 	// Routes
 	api := app.Group("/api")
+	// Task
+	api.Get("/v1/task/params", taskHandler.TaskParams)        // TODO
+	api.Get("/v1/record/params", recordHandler.GetTaskParams) // Remove in future Task Params
 	// TaskRecords
 	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
 	// api.Get("/v1/task/next", taskRecordHandler.TasksNext)
@@ -38,10 +50,6 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/rest/add", restHandler.RestAdd)
 
 	// Review
-
-	recordHandler := record.New(mongoconn, notify)
-	roleHandler := role.New(mongoconn, notify)
-	manageHandler := manage.New(mongoconn, notify)
 
 	// Routes
 
@@ -61,7 +69,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/record", recordHandler.AddRecord)
 	api.Get("/v1/record/task-day", recordHandler.GetDayTaskRecord)
 	api.Post("/v1/record/params", recordHandler.SetTaskParams)
-	api.Get("/v1/record/params", recordHandler.GetTaskParams)
+
 	api.Get("/v1/records", recordHandler.ShowRecords)
 	api.Get("/v1/records/clean", recordHandler.CleanRecords)
 	api.Get("/v1/tasklist", recordHandler.ShowTaskList)
