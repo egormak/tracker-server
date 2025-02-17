@@ -48,6 +48,10 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Get("/v1/task/plan/percent", taskRecordHandler.GetTaskPlanPercent)
 	// Rest
 	api.Post("/v1/rest/add", restHandler.RestAdd)
+	api.Post("/v1/rest-spend", restHandler.RestSpend) // Remove in future
+	api.Post("/v1/rest/spend", restHandler.RestSpend)
+	api.Get("/v1/rest-get", restHandler.RestGet) // Remove in future
+	api.Get("/v1/rest/get", restHandler.RestGet)
 
 	// Review
 
@@ -58,9 +62,6 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	// General
 
-	api.Post("/v1/rest-spend", restHandler.RestSpend)
-
-	api.Get("/v1/rest-get", restHandler.RestGet)
 	api.Post("/v1/timer/set", manageHandler.TimerSet)
 	api.Get("/v1/timer/get", manageHandler.TimerGet)
 	api.Post("/v1/timer/del", recordHandler.TimerDel)
