@@ -20,6 +20,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	taskRecordService := services.NewTaskRecordService(mongoconn)
 	restService := services.NewRestService(mongoconn)
 	statsService := services.NewStatisticService(mongoconn)
+	// manageService := services.NewManageService(mongoconn)
 
 	// Handlers
 	// Task
@@ -42,6 +43,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Task
 	api.Get("/v1/task/params", taskHandler.TaskParams)        // TODO
 	api.Get("/v1/record/params", recordHandler.GetTaskParams) // Remove in future Task Params
+	// api.Post("/v1/task/create", taskHandler.CreateTask)
 	// TaskRecords
 	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
 	// api.Get("/v1/task/next", taskRecordHandler.TasksNext)

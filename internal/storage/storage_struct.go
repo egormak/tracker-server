@@ -13,14 +13,6 @@ type TaskRecordOptions struct {
 
 type TaskRecordOption func(*TaskRecordOptions)
 
-type TaskConfig struct {
-	Name         string
-	Role         string
-	Date         string
-	TimeSchedule int
-	Priority     int
-}
-
 type TaskResult struct {
 	Name         string `json:"name"`
 	Role         string `json:"role"`
@@ -58,8 +50,3 @@ type SchedulerInfo struct {
 	Date        string
 	ScheduleAll int
 }
-
-// type StatisticRecord struct {
-// 	CompletionTime    int
-// 	CompletionPercent int
-// }

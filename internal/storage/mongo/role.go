@@ -169,7 +169,7 @@ func (s *Storage) GetRole(taskName string) (string, error) {
 	coll := database.Collection(taskNamesList)
 
 	// Find the task configuration in the collection
-	var result entity.TaskConfig
+	var result entity.TaskDefinition
 	err := coll.FindOne(s.Context, bson.D{{"name", taskName}}).Decode(&result)
 	if err != nil {
 		// Return an error if the task configuration is not found

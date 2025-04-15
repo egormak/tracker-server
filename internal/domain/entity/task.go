@@ -20,12 +20,12 @@ type TaskResult struct {
 	Priority     int    `json:"priority"`
 }
 
-type TaskConfig struct {
+type TaskDefinition struct {
 	Name         string
 	Role         string
-	Date         string
 	TimeSchedule int
 	Priority     int
+	Date         string
 }
 
 type TaskParams struct {
