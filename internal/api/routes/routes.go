@@ -20,7 +20,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	taskRecordService := services.NewTaskRecordService(mongoconn)
 	restService := services.NewRestService(mongoconn)
 	statsService := services.NewStatisticService(mongoconn)
-	// manageService := services.NewManageService(mongoconn)
+	manageService := services.NewManageService(mongoconn)
 
 	// Handlers
 	// Task
@@ -31,11 +31,13 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	restHandler := handler.NewRestHandler(restService)
 	// Statistics
 	statsHandler := handler.NewStatisticHandler(statsService)
+	// Manage
+	manageHandler := handler.NewManageHandler(manageService)
 
 	// OLD Logic
 	recordHandler := record.New(mongoconn, notify)
 	roleHandler := role.New(mongoconn, notify)
-	manageHandler := manage.New(mongoconn, notify)
+	manageHandlerOld := manage.New(mongoconn, notify)
 	//
 
 	// Routes
@@ -54,6 +56,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/rest/spend", restHandler.RestSpend)
 	api.Get("/v1/rest-get", restHandler.RestGet) // Remove in future
 	api.Get("/v1/rest/get", restHandler.RestGet)
+	// Manage
+	api.Post("/v1/manage/task/create", manageHandler.CreateTask)
 
 	// Review
 
@@ -64,8 +68,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	// General
 
-	api.Post("/v1/timer/set", manageHandler.TimerSet)
-	api.Get("/v1/timer/get", manageHandler.TimerGet)
+	api.Post("/v1/timer/set", manageHandlerOld.TimerSet)
+	api.Get("/v1/timer/get", manageHandlerOld.TimerGet)
 	api.Post("/v1/timer/del", recordHandler.TimerDel)
 
 	// Records
@@ -88,12 +92,12 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Get("/v1/role/get", roleHandler.TaskRoleGet)
 
 	//Manage
-	api.Post("/v1/manage/procents", manageHandler.ProcentsSet)
-	api.Get("/v1/manage/timer/recheck", manageHandler.TimerRecheck)
-	api.Post("/v1/manage/timer/global", manageHandler.TimerGlobalSet)
-	api.Get("/v1/manage/timer/global", manageHandler.TimerGlobalGet)
-	api.Post("/v1/manage/telegram/start", manageHandler.TelegramSendStart)
-	api.Post("/v1/manage/telegram/stop", manageHandler.TelegramSendStop)
+	api.Post("/v1/manage/procents", manageHandlerOld.ProcentsSet)
+	api.Get("/v1/manage/timer/recheck", manageHandlerOld.TimerRecheck)
+	api.Post("/v1/manage/timer/global", manageHandlerOld.TimerGlobalSet)
+	api.Get("/v1/manage/timer/global", manageHandlerOld.TimerGlobalGet)
+	api.Post("/v1/manage/telegram/start", manageHandlerOld.TelegramSendStart)
+	api.Post("/v1/manage/telegram/stop", manageHandlerOld.TelegramSendStop)
 
 	app.Get("/", welcome.Welcome)
 }

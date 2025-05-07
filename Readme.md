@@ -29,6 +29,11 @@ docker push ghcr.io/egormak/tracker-server:$(date +%Y-%m-%d)
 ```
 
 # Run Project
+## Test
+```shell
+docker build 
+docker run -it --rm -p 3000:3000 -v ${PWD}/config.yaml:/config.yaml ghcr.io/egormak/tracker-server:$(date +%Y-%m-%d)
+```
 ## Dev
 ```shell
 docker run -it --rm -p 3000:3000 -v ${PWD}/config.yaml:/config.yaml ghcr.io/egormak/tracker-server:$(date +%Y-%m-%d)

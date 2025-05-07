@@ -1,25 +1,395 @@
 openapi: 3.1.0
 info:
-  title: API Documentation
-  description: API documentation for the service
+  title: Tracker Server API
+  description: |
+    API for time tracking with three main roles: Work, Learn, and Rest.
+    This service helps track time spent on various tasks and manage schedules.
   version: 1.0.0
 servers:
   - url: http://localhost:8080
+    description: Development server
+tags:
+  - name: Task
+    description: Task management operations
+  - name: TaskRecord
+    description: Task record operations
+  - name: Rest
+    description: Rest time management
+  - name: Statistics
+    description: Statistical information
+  - name: Role
+    description: Role management
+  - name: Timer
+    description: Timer operations
+  - name: Management
+    description: System management operations
+
 paths:
-  /v1/stats/done:
-    summary: Statistics Done
-    description: Statistics Done
+  /api/v1/stats/done/today:
     get:
-      summary: Get Statistics Done
-      description: Get Time and Percent Done
-      operationId: GetStatsDone
+      tags:
+        - Statistics
+      summary: Get today's completion statistics
+      description: Get time completed for today
+      operationId: getStatsDoneToday
       responses:
         '200':
-          description: Get Data
+          description: Successfully retrieved statistics
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/StatsDone"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/task/params:
+    get:
+      tags:
+        - Task
+      summary: Get task parameters
+      description: Retrieve parameters for a specific task
+      operationId: getTaskParams
+      parameters:
+        - name: task_name
+          in: query
+          description: Name of the task
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task parameters retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskParams"
+        '404':
+          description: Task not found or parameters are old
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/taskrecord:
+    post:
+      tags:
+        - TaskRecord
+      summary: Add a task record
+      description: Record time spent on a task
+      operationId: addTaskRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskRecordRequest"
+      responses:
+        '200':
+          description: Record added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/task/plan/percent:
+    get:
+      tags:
+        - Task
+      summary: Get task plan percent
+      description: Get the next task based on plan percentage
+      operationId: getTaskPlanPercent
+      responses:
+        '200':
+          description: Task plan percentage retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanPercentResponse"
+        '404':
+          description: No tasks available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/rest/add:
+    post:
+      tags:
+        - Rest
+      summary: Add rest time
+      description: Add rest time to the account
+      operationId: addRest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestRecordRequest"
+      responses:
+        '200':
+          description: Rest time added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/rest/spend:
+    post:
+      tags:
+        - Rest
+      summary: Spend rest time
+      description: Spend rest time from the account
+      operationId: spendRest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestRecordRequest"
+      responses:
+        '200':
+          description: Rest time spent successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/rest/get:
+    get:
+      tags:
+        - Rest
+      summary: Get rest time
+      description: Get available rest time
+      operationId: getRest
+      responses:
+        '200':
+          description: Rest time retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestTimeResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/manage/task/create:
+    post:
+      tags:
+        - Management
+      summary: Create a new task
+      description: Create a new task with a specific role
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskRequest"
+      responses:
+        '201':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/timer/set:
+    post:
+      tags:
+        - Timer
+      summary: Set timer
+      description: Set a timer with a specific count
+      operationId: setTimer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimerSetRequest"
+      responses:
+        '200':
+          description: Timer set successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/timer/get:
+    get:
+      tags:
+        - Timer
+      summary: Get timer
+      description: Get the current timer duration
+      operationId: getTimer
+      responses:
+        '200':
+          description: Timer retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimerResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tasklist:
+    get:
+      tags:
+        - Task
+      summary: Get task list
+      description: Get a list of all tasks
+      operationId: getTaskList
+      responses:
+        '200':
+          description: Task list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskResult"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/roles/records:
+    get:
+      tags:
+        - Role
+      summary: Get role records
+      description: Get records for all roles
+      operationId: getRoleRecords
+      responses:
+        '200':
+          description: Role records retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/manage/telegram/start:
+    post:
+      tags:
+        - Management
+      summary: Start telegram notification
+      description: Send a start notification via Telegram
+      operationId: startTelegramNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramStartRequest"
+      responses:
+        '200':
+          description: Notification sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramStartResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/manage/telegram/stop:
+    post:
+      tags:
+        - Management
+      summary: Stop telegram notification
+      description: Send a stop notification via Telegram
+      operationId: stopTelegramNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramStopRequest"
+      responses:
+        '200':
+          description: Notification sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     StatsDone:
@@ -27,302 +397,243 @@ components:
       properties:
         time_done:
           type: integer
+          description: Time completed in minutes
         percent_done:
           type: integer
+          description: Percentage of completion
       required:
         - time_done
-        - percent_done
       example:
         time_done: 300
         percent_done: 80
 
-#   /v1/rest-spend:
-#     post:
-#       summary: Spend rest time
-#       operationId: RestSpend
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/rest-add:
-#     post:
-#       summary: Add rest time
-#       operationId: RestAdd
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/rest-get:
-#     get:
-#       summary: Get rest time
-#       operationId: RestGet
-#       responses:
-#         '200':
-#           description: Successful operation
-#           content:
-#             application/json:
-#               schema:
-#                 type: object
-#                 properties:
-#                   # Add your response schema here
-#   /v1/timer/set:
-#     post:
-#       summary: Set a timer
-#       operationId: TimerSet
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/timer/get:
-#     get:
-#       summary: Get timer
-#       operationId: TimerGet
-#       responses:
-#         '200':
-#           description: Successful operation
-#           content:
-#             application/json:
-#               schema:
-#                 type: object
-#                 properties:
-#                   # Add your response schema here
-#   /v1/timer/del:
-#     post:
-#       summary: Delete a timer
-#       operationId: TimerDel
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/record:
-#     post:
-#       summary: Add a record
-#       operationId: AddRecord
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/record/task-day:
-#     get:
-#       summary: Get day task record
-#       operationId: GetDayTaskRecord
-#       responses:
-#         '200':
-#           description: Successful operation
-#           content:
-#             application/json:
-#               schema:
-#                 type: object
-#                 properties:
-#                   # Add your response schema here
-#   /v1/record/params:
-#     post:
-#       summary: Set task parameters
-#       operationId: SetTaskParams
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
-#     get:
-#       summary: Get task parameters
-#       operationId: GetTaskParams
-#       responses:
-#         '200':
-#           description: Successful operation
-#           content:
-#             application/json:
-#               schema:
-#                 type: object
-#                 properties:
-#                   # Add your response schema here
-#   /v1/records:
-#     get:
-#       summary: Show all records
-#       operationId: ShowRecords
-#       responses:
-#         '200':
-#           description: Successful operation
-#           content:
-#             application/json:
-#               schema:
-#                 type: object
-#                 properties:
-#                   # Add your response schema here
-#   /v1/records/clean:
-#     get:
-#       summary: Clean records
-#       operationId: CleanRecords
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/tasklist:
-#     get:
-#       summary: Show task list
-#       operationId: ShowTaskList
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/task/plan-percent:
-#     get:
-#       summary: Get task plan percent
-#       operationId: GetTaskPlanPercent
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/task/percent:
-#     get:
-#       summary: Get task day by percent
-#       operationId: GetTaskDayByPercent
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/task/plan-percent/change:
-#     get:
-#       summary: Change group plan percent
-#       operationId: ChangeGroupPlanPercent
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/roles/records:
-#     get:
-#       summary: Show roles records
-#       operationId: ShowRolesRecords
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/roles/records/today:
-#     get:
-#       summary: Stat completion time done
-#       operationId: StatCompletionTimeDone
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/role/recheck:
-#     get:
-#       summary: Recheck role
-#       operationId: RecheckRole
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/role/get:
-#     get:
-#       summary: Get task role
-#       operationId: TaskRoleGet
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/manage/procents:
-#     post:
-#       summary: Set procents
-#       operationId: ProcentsSet
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/manage/timer/recheck:
-#     get:
-#       summary: Recheck timer
-#       operationId: TimerRecheck
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/manage/timer/global:
-#     post:
-#       summary: Set global timer
-#       operationId: TimerGlobalSet
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
-#     get:
-#       summary: Get global timer
-#       operationId: TimerGlobalGet
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/manage/telegram/start:
-#     post:
-#       summary: Start telegram send
-#       operationId: TelegramSendStart
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
-#   /v1/manage/telegram/stop:
-#     post:
-#       summary: Stop telegram send
-#       operationId: TelegramSendStop
-#       requestBody:
-#         required: true
-#         content:
-#           application/json:
-#             schema:
-#               type: object
-#               properties:
-#                 # Add your request body schema here
-#       responses:
-#         '200':
-#           description: Successful operation
+    TaskParams:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Task name
+        time:
+          type: integer
+          description: Time allocated for the task in minutes
+        priority:
+          type: integer
+          description: Priority of the task (higher number = higher priority)
+      required:
+        - name
+        - time
+        - priority
+      example:
+        name: "Programming"
+        time: 120
+        priority: 5
+
+    TaskRecordRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+          description: Name of the task
+        time_done:
+          type: integer
+          description: Time spent on the task in minutes
+      required:
+        - task_name
+        - time_done
+      example:
+        task_name: "Programming"
+        time_done: 45
+
+    PlanPercentResponse:
+      type: object
+      properties:
+        task_name:
+          type: string
+          description: Name of the task
+        percent:
+          type: integer
+          description: Percentage of the task
+        time_left:
+          type: integer
+          description: Time left for the task in minutes
+      required:
+        - task_name
+        - percent
+        - time_left
+      example:
+        task_name: "Programming"
+        percent: 80
+        time_left: 24
+
+    RestRecordRequest:
+      type: object
+      properties:
+        rest_time:
+          type: integer
+          description: Rest time in minutes
+      required:
+        - rest_time
+      example:
+        rest_time: 15
+
+    RestTimeResponse:
+      type: object
+      properties:
+        rest_time:
+          type: integer
+          description: Available rest time in minutes
+      required:
+        - rest_time
+      example:
+        rest_time: 45
+
+    CreateTaskRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+          description: Name of the task
+        role:
+          type: string
+          description: Role of the task (work, learn, rest)
+      required:
+        - task_name
+        - role
+      example:
+        task_name: "Programming"
+        role: "learn"
+
+    TimerSetRequest:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Timer count
+      required:
+        - count
+      example:
+        count: 10
+
+    TimerResponse:
+      type: object
+      properties:
+        time_duration:
+          type: integer
+          description: Timer duration in minutes
+      required:
+        - time_duration
+      example:
+        time_duration: 25
+
+    TaskResult:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Task name
+        role:
+          type: string
+          description: Role of the task
+        time_duration:
+          type: integer
+          description: Total time duration for the task
+        time_done:
+          type: integer
+          description: Time already spent on the task
+        priority:
+          type: integer
+          description: Priority of the task
+      required:
+        - name
+        - role
+        - time_duration
+        - time_done
+        - priority
+      example:
+        name: "Programming"
+        role: "learn"
+        time_duration: 120
+        time_done: 45
+        priority: 5
+
+    TelegramStartRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+          description: Name of the task
+      required:
+        - task_name
+      example:
+        task_name: "Programming"
+
+    TelegramStartResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: ["accept"]
+        msg_id:
+          type: integer
+          description: Telegram message ID
+      required:
+        - status
+        - msg_id
+      example:
+        status: "accept"
+        msg_id: 123456
+
+    TelegramStopRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+          description: Name of the task
+        msg_id:
+          type: integer
+          description: Telegram message ID to update
+        time_done:
+          type: integer
+          description: Time spent on the task
+        time_end:
+          type: string
+          description: End time of the task in string format
+      required:
+        - task_name
+        - msg_id
+        - time_done
+        - time_end
+      example:
+        task_name: "Programming"
+        msg_id: 123456
+        time_done: 45
+        time_end: "2 January 2024 15:45"
+
+    SuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: ["accept", "success"]
+        message:
+          type: string
+      required:
+        - status
+      example:
+        status: "accept"
+        message: "Operation completed successfully"
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: ["error"]
+        message:
+          type: string
+      required:
+        - status
+        - message
+      example:
+        status: "error"
+        message: "An error occurred"

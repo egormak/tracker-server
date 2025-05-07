@@ -1,4 +1,4 @@
-FROM golang:1.22.2 AS builder
+FROM golang:1.24.2 AS builder
 
 ENV TZ=Europe/Kiev
 
@@ -9,7 +9,7 @@ COPY . .
 # RUN go get -d -v ./
 RUN go build -o /out/app cmd/server/main.go
 
-FROM ubuntu:22.04 AS bin
+FROM ubuntu:24.10 AS bin
 
 ENV TZ=Europe/Kiev
 

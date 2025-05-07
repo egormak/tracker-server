@@ -36,4 +36,5 @@ type Storage interface {
 	GetTodayTaskDuration(taskName string) (int, error)
 	// GetTaskRecordToday(opts ...TaskRecordOption) ([]TaskRecord, error)
 	// WithCheckBusinessDay(check bool) TaskRecordOption
+	CreateTask(task entity.TaskDefinition) error
 }

@@ -274,8 +274,13 @@ func (s *Storage) CreateTask(taskDefinition entity.TaskDefinition) error {
 		return fmt.Errorf("role cannot be empty")
 	}
 
+	// Validate that the role is correct
+	if err := CorrectRoleCheck(taskDefinition.Role); err != nil {
+		return fmt.Errorf("invalid role: %w", err)
+	}
+
 	// Check if task already exists
-	coll := s.Client.Database(dbName).Collection(tasksList)
+	coll := s.Client.Database(dbName).Collection(taskNamesList)
 	filter := bson.M{"name": taskDefinition.Name}
 	count, err := coll.CountDocuments(s.Context, filter)
 	if err != nil {
