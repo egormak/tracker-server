@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - tracker
+
+  api:
+    build: .
+    image: ghcr.io/egormak/tracker-server:${TAG:-dev}
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config.yaml:/config.yaml:ro
+    networks:
+      - tracker
+
+  web:
+    build:
+      context: ./web
+    image: ghcr.io/egormak/tracker-web:${TAG:-dev}
+    depends_on:
+      - api
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    networks:
+      - tracker
+
+volumes:
+  mongo-data:
+
+networks:
+  tracker:
+    driver: bridge
+

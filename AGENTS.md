@@ -47,3 +47,19 @@
 - Do not hardcode secrets. Provide `config.yaml` (mount in Docker) with:
   - `mongodb.host`, `mongodb.port`, `mongodb.name`; `telegram.api_key`, `telegram.room_id`.
 - Default server port: `3000`. Ensure MongoDB is reachable from the container.
+
+## Web UI (React)
+- Location: `web/` (Vite + React + TypeScript)
+- Dev: `cd web && npm install && npm run dev` → http://localhost:5173
+- During dev, Vite proxies `/api` → `http://localhost:3000`; set `VITE_API_BASE_URL` for other deployments.
+
+## API Highlights
+- See `openapi.yml` for the full spec.
+- Common routes:
+  - GET `/api/v1/stats/done/today` – today results
+  - GET `/api/v1/task/plan/percent` – next task by plan percent
+  - POST `/api/v1/taskrecord` – add record `{ task_name, time_done }`
+  - Rest: GET `/api/v1/rest/get`, POST `/api/v1/rest/add`, `/api/v1/rest/spend`
+  - Manage: POST `/api/v1/manage/task/create`
+  - Timer: GET `/api/v1/timer/get`, POST `/api/v1/timer/set`
+  - Legacy: GET `/api/v1/task/plan-percent/change`, POST `/api/v1/manage/procents`

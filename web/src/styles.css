@@ -1,0 +1,74 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #111827;
+  --panel-alt: #0f172a;
+  --border: #1f2937;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --primary: #3b82f6;
+  --primary-600: #2563eb;
+  --accent: #22d3ee;
+  --success: #10b981;
+  --danger: #ef4444;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  background: linear-gradient(180deg, #0b0f14 0%, #0b0f14 60%, #0b0f14 100%);
+  color: var(--text);
+}
+
+.container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+/* Header */
+.header { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(10px); background: rgba(15, 23, 42, 0.6); border-bottom: 1px solid var(--border); }
+.header-inner { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.3px; }
+.brand-badge { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--primary), var(--accent)); display: grid; place-items: center; font-size: 13px; color: #0b0f14; }
+.nav { margin-left: auto; display: flex; gap: 10px; }
+.nav a { color: var(--muted); text-decoration: none; padding: 8px 10px; border-radius: 8px; transition: background 0.2s, color 0.2s; }
+.nav a:hover { color: var(--text); background: #0f172a; }
+.nav a.active { color: #fff; background: #0b1220; box-shadow: 0 0 0 1px #1f2937 inset; }
+
+/* Layout blocks */
+.grid { display: grid; gap: 16px; }
+.grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .grid.cols-3 { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .grid.cols-2 { grid-template-columns: 1fr; } }
+
+.card { background: radial-gradient(1200px 220px at 20% -20%, rgba(59, 130, 246, 0.20), transparent 40%), linear-gradient(180deg, var(--panel), var(--panel-alt)); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+.card h3 { margin: 0 0 12px; font-size: 16px; color: #eaeef5; }
+.card .muted { color: var(--muted); font-size: 13px; }
+
+/* Buttons */
+.row { display: flex; align-items: center; gap: 10px; }
+.btn { appearance: none; border: 1px solid #1e293b; color: #ecf0f7; background: linear-gradient(180deg, #0f172a, #0b1220); padding: 8px 12px; border-radius: 10px; cursor: pointer; transition: 0.2s background, 0.2s transform; }
+.btn:hover { background: #0e1525; }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: linear-gradient(180deg, var(--primary), var(--primary-600)); border-color: #1d4ed8; }
+.btn.danger { background: linear-gradient(180deg, #ef4444, #dc2626); border-color: #b91c1c; }
+
+/* Inputs */
+.field { display: grid; gap: 6px; }
+.label { color: var(--muted); font-size: 12px; }
+.input, .select { width: 100%; color: var(--text); background: #0b1220; border: 1px solid #1f2937; border-radius: 10px; padding: 10px 12px; outline: none; transition: border 0.2s; }
+.input:focus, .select:focus { border-color: var(--primary); }
+
+/* Alerts */
+.alert { border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.alert.error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #fecaca; }
+.alert.success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #bbf7d0; }
+
+/* Progress */
+.progress { background: #0b1220; border: 1px solid #1f2937; border-radius: 10px; height: 10px; overflow: hidden; }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); width: 0%; transition: width 0.4s ease; }
+
+/* Table-ish list */
+.list { display: grid; gap: 8px; }
+.list-item { display: grid; gap: 10px; grid-template-columns: 1fr auto; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: #0c1322; }
+.kpi { color: #cbd5e1; font-variant-numeric: tabular-nums; }
+
