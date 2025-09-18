@@ -7,7 +7,9 @@ info:
   version: 1.0.0
 servers:
   - url: http://localhost:8080
-    description: Development server
+    description: Development (Docker host mapping 8080->3000)
+  - url: http://localhost:3000
+    description: Local server (direct)
 tags:
   - name: Task
     description: Task management operations
@@ -34,11 +36,13 @@ paths:
       operationId: getStatsDoneToday
       responses:
         '200':
-          description: Successfully retrieved statistics
+          description: Successfully retrieved today's task results
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StatsDone"
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskResult"
         '500':
           description: Internal server error
           content:
@@ -100,6 +104,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         '500':
           description: Internal server error
           content:
@@ -154,6 +164,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         '500':
           description: Internal server error
           content:
@@ -181,6 +197,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         '500':
           description: Internal server error
           content:
@@ -390,6 +412,431 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/timer/del:
+    post:
+      deprecated: true
+      tags:
+        - Timer
+      summary: Delete timer entries
+      description: Decrease timer entries by count
+      operationId: deleteTimer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimerSetRequest"
+      responses:
+        '200':
+          description: Timer decreased successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/task/percent:
+    get:
+      deprecated: true
+      tags:
+        - Task
+      summary: Get task name by percent
+      description: Returns a task name for a given percent bucket
+      operationId: getTaskByPercent
+      parameters:
+        - name: percent
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Task name resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskNameResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/task/plan-percent:
+    get:
+      deprecated: true
+      tags:
+        - Task
+      summary: Get planned task by percent (legacy)
+      operationId: getLegacyTaskPlanPercent
+      responses:
+        '200':
+          description: Legacy plan percent response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OldPlanPercentResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/task/plan-percent/change:
+    get:
+      deprecated: true
+      tags:
+        - Task
+      summary: Rotate plan percent group (legacy)
+      operationId: changeLegacyPlanPercent
+      responses:
+        '200':
+          description: Rotation accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/record/task-day:
+    get:
+      deprecated: true
+      tags:
+        - TaskRecord
+      summary: Get today's duration for a task
+      operationId: getTaskDayDuration
+      parameters:
+        - name: task_name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Duration retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskDayDurationResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/record:
+    post:
+      deprecated: true
+      tags:
+        - TaskRecord
+      summary: Add a task record (legacy)
+      operationId: addRecordLegacy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskRecordRequest"
+      responses:
+        '200':
+          description: Record added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/records:
+    get:
+      deprecated: true
+      tags:
+        - TaskRecord
+      summary: Get records summary (today/yesterday/all)
+      operationId: getRecordsSummary
+      responses:
+        '200':
+          description: Summary retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordsSummaryResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/records/clean:
+    get:
+      deprecated: true
+      tags:
+        - TaskRecord
+      summary: Clean all records (dev)
+      operationId: cleanRecords
+      responses:
+        '200':
+          description: Cleaned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/record/params:
+    post:
+      deprecated: true
+      tags:
+        - Task
+      summary: Set task params (legacy)
+      operationId: setTaskParamsLegacy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetTaskParamsRequest"
+      responses:
+        '200':
+          description: Parameters set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/roles/records/today:
+    get:
+      tags:
+        - Role
+      summary: Get today's done time across roles
+      operationId: getRolesRecordsToday
+      responses:
+        '200':
+          description: Aggregated time done
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleTimeDoneResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/role/recheck:
+    get:
+      tags:
+        - Role
+      summary: Recompute roles (maintenance)
+      operationId: recheckRole
+      responses:
+        '200':
+          description: Recheck started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/role/get:
+    get:
+      tags:
+        - Role
+      summary: Get role for a task
+      operationId: getTaskRole
+      parameters:
+        - name: task_name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleGetResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/rest-get:
+    get:
+      deprecated: true
+      tags:
+        - Rest
+      summary: Get rest time (legacy)
+      operationId: getRestLegacy
+      responses:
+        '200':
+          description: Rest time retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestTimeResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/rest-spend:
+    post:
+      deprecated: true
+      tags:
+        - Rest
+      summary: Spend rest time (legacy)
+      operationId: spendRestLegacy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestRecordRequest"
+      responses:
+        '200':
+          description: Rest time spent successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/manage/procents:
+    post:
+      tags:
+        - Management
+      summary: Set plan percents per role
+      operationId: setProcents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManageProcentsRequest"
+      responses:
+        '200':
+          description: Percents set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/manage/timer/recheck:
+    get:
+      tags:
+        - Management
+      summary: Recalculate global timer steps
+      operationId: recheckTimer
+      responses:
+        '200':
+          description: Recalculated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/manage/timer/global:
+    get:
+      tags:
+        - Management
+      summary: Get global timer
+      operationId: getGlobalTimer
+      responses:
+        '200':
+          description: Current global timer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimerGlobalResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags:
+        - Management
+      summary: Set global timer
+      operationId: setGlobalTimer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimerGlobalSetRequest"
+      responses:
+        '200':
+          description: Timer set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     StatsDone:
@@ -410,23 +857,150 @@ components:
     TaskParams:
       type: object
       properties:
-        name:
+        Name:
           type: string
           description: Task name
-        time:
+        Time:
           type: integer
           description: Time allocated for the task in minutes
-        priority:
+        Priority:
           type: integer
           description: Priority of the task (higher number = higher priority)
       required:
-        - name
-        - time
-        - priority
+        - Name
+        - Time
+        - Priority
       example:
-        name: "Programming"
-        time: 120
-        priority: 5
+        Name: "Programming"
+        Time: 120
+        Priority: 5
+
+    OldPlanPercentResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        task_name:
+          type: string
+        percent:
+          type: integer
+      required:
+        - status
+        - task_name
+        - percent
+      example:
+        status: "accept"
+        task_name: "Programming"
+        percent: 80
+
+    TaskNameResponse:
+      type: object
+      properties:
+        task_name:
+          type: string
+      required:
+        - task_name
+      example:
+        task_name: "Programming"
+
+    TaskDayDurationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        task_duration:
+          type: integer
+      required:
+        - status
+        - task_duration
+      example:
+        status: "Done"
+        task_duration: 45
+
+    RecordsSummaryResponse:
+      type: object
+      properties:
+        today:
+          type: object
+          additionalProperties:
+            type: integer
+        yesterday:
+          type: object
+          additionalProperties:
+            type: integer
+        all:
+          type: object
+          additionalProperties:
+            type: integer
+
+    SetTaskParamsRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        time_duration:
+          type: integer
+        priority:
+          type: integer
+      required:
+        - name
+        - time_duration
+        - priority
+
+    RoleTimeDoneResponse:
+      type: object
+      properties:
+        time_done:
+          type: integer
+      required:
+        - time_done
+      example:
+        time_done: 180
+
+    RoleGetResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        role:
+          type: string
+      required:
+        - status
+        - role
+      example:
+        status: "accept"
+        role: "work"
+
+    ManageProcentsRequest:
+      type: object
+      properties:
+        procents:
+          type: array
+          items:
+            type: integer
+        role_name:
+          type: string
+          description: Optional; one of plan, work, learn, rest
+      required:
+        - procents
+
+    TimerGlobalResponse:
+      type: object
+      properties:
+        timer_global:
+          type: integer
+      required:
+        - timer_global
+      example:
+        timer_global: 5
+
+    TimerGlobalSetRequest:
+      type: object
+      properties:
+        time_scheduler:
+          type: integer
+      required:
+        - time_scheduler
 
     TaskRecordRequest:
       type: object
