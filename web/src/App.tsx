@@ -1,3 +1,5 @@
+import Box from '@mui/material/Box'
+import Container from '@mui/material/Container'
 import { Route, Routes } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Plan from './pages/Plan'
@@ -9,9 +11,9 @@ import Header from './components/Header'
 
 export default function App() {
   return (
-    <>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', color: 'text.primary' }}>
       <Header />
-      <div className="container" style={{ paddingTop: 18 }}>
+      <Container sx={{ pt: 3, pb: 6 }}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/plan" element={<Plan />} />
@@ -20,7 +22,7 @@ export default function App() {
           <Route path="/manage" element={<Manage />} />
           <Route path="/timer" element={<Timer />} />
         </Routes>
-      </div>
-    </>
+      </Container>
+    </Box>
   )
 }

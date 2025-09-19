@@ -1,7 +1,14 @@
 import { useState } from 'react'
+import Button from '@mui/material/Button'
+import Grid from '@mui/material/Grid'
+import InputAdornment from '@mui/material/InputAdornment'
+import Stack from '@mui/material/Stack'
+import TextField from '@mui/material/TextField'
+import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined'
+import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
 import { api } from '../api/client'
-import Card from '../components/Card'
 import Alert from '../components/Alert'
+import Card from '../components/Card'
 
 export default function Record() {
   const [taskName, setTaskName] = useState('')
@@ -24,24 +31,34 @@ export default function Record() {
   }
 
   return (
-    <div className="grid cols-2">
-      <Card title="Add Task Record" subtitle="Track completed minutes">
-        {error && <Alert type="error">{error}</Alert>}
-        {msg && <Alert type="success">{msg}</Alert>}
-        <form onSubmit={submit} className="grid" style={{ gap: 12, maxWidth: 460 }}>
-          <div className="field">
-            <label className="label">Task Name</label>
-            <input className="input" value={taskName} onChange={e => setTaskName(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="label">Time Done (min)</label>
-            <input className="input" value={timeDone} onChange={e => setTimeDone(e.target.value)} />
-          </div>
-          <div className="row" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn primary" type="submit">Save</button>
-          </div>
-        </form>
-      </Card>
-    </div>
+    <Grid container spacing={3}>
+      <Grid item xs={12} md={6}>
+        <Card title="Add Task Record" subtitle="Track completed minutes" icon={<AssignmentTurnedInOutlinedIcon />}>
+          {error && <Alert type="error">{error}</Alert>}
+          {msg && <Alert type="success">{msg}</Alert>}
+          <Stack component="form" onSubmit={submit} spacing={2} sx={{ maxWidth: 460 }}>
+            <TextField
+              label="Task Name"
+              value={taskName}
+              onChange={(e) => setTaskName(e.target.value)}
+              required
+            />
+            <TextField
+              label="Time Done (min)"
+              value={timeDone}
+              onChange={(e) => setTimeDone(e.target.value)}
+              inputMode="numeric"
+              InputProps={{ endAdornment: <InputAdornment position="end">min</InputAdornment> }}
+              required
+            />
+            <Stack direction="row" justifyContent="flex-end">
+              <Button variant="contained" type="submit" startIcon={<SaveRoundedIcon />}>
+                Save
+              </Button>
+            </Stack>
+          </Stack>
+        </Card>
+      </Grid>
+    </Grid>
   )
 }

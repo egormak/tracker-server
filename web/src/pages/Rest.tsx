@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
+import Button from '@mui/material/Button'
+import Grid from '@mui/material/Grid'
+import InputAdornment from '@mui/material/InputAdornment'
+import Stack from '@mui/material/Stack'
+import TextField from '@mui/material/TextField'
+import Typography from '@mui/material/Typography'
+import LocalHotelOutlinedIcon from '@mui/icons-material/LocalHotelOutlined'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded'
 import { api } from '../api/client'
-import Card from '../components/Card'
 import Alert from '../components/Alert'
+import Card from '../components/Card'
 
 export default function Rest() {
   const [rest, setRest] = useState<number | null>(null)
@@ -32,17 +41,32 @@ export default function Rest() {
   }
 
   return (
-    <div className="grid cols-2">
-      <Card title="Rest Balance" subtitle="Manage rest minutes">
-        {error && <Alert type="error">{error}</Alert>}
-        {msg && <Alert type="success">{msg}</Alert>}
-        <div className="kpi" style={{ fontSize: 28, marginBottom: 8 }}>{rest ?? '-'} min</div>
-        <div className="row">
-          <input className="input" value={value} onChange={e => setValue(e.target.value)} placeholder="minutes" style={{ maxWidth: 160 }} />
-          <button className="btn primary" onClick={() => act('add')}>Add</button>
-          <button className="btn" onClick={() => act('spend')}>Spend</button>
-        </div>
-      </Card>
-    </div>
+    <Grid container spacing={3}>
+      <Grid item xs={12} md={6}>
+        <Card title="Rest Balance" subtitle="Manage rest minutes" icon={<LocalHotelOutlinedIcon />}>
+          {error && <Alert type="error">{error}</Alert>}
+          {msg && <Alert type="success">{msg}</Alert>}
+          <Stack spacing={3}>
+            <Typography variant="h3">{rest ?? '-'} min</Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start">
+              <TextField
+                label="Minutes"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                inputMode="numeric"
+                InputProps={{ endAdornment: <InputAdornment position="end">min</InputAdornment> }}
+                sx={{ maxWidth: 200 }}
+              />
+              <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => act('add')}>
+                Add
+              </Button>
+              <Button variant="outlined" startIcon={<RemoveRoundedIcon />} onClick={() => act('spend')}>
+                Spend
+              </Button>
+            </Stack>
+          </Stack>
+        </Card>
+      </Grid>
+    </Grid>
   )
 }
