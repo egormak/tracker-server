@@ -42,10 +42,22 @@ export interface CreateTaskRequest { task_name: string; role: string }
 export interface TimerSetRequest { count: number }
 export interface TimerResponse { time_duration: number }
 
+// Records summary (today/yesterday/all)
+export interface RecordsSummary {
+  today: Record<string, number>
+  yesterday: Record<string, number>
+  all: Record<string, number>
+}
+
 // API wrappers
 export const api = {
   // Statistics
   getStatsDoneToday: () => request<TaskResult[]>('GET', '/api/v1/stats/done/today'),
+  getStatsTasksToday: () => request<TaskResult[]>('GET', '/api/v1/stats/tasks/today'),
+  // Records summary
+  getRecordsSummary: () => request<RecordsSummary>('GET', '/api/v1/records'),
+  // Task list with planned vs done (today)
+  getTaskList: () => request<TaskResult[]>('GET', '/api/v1/tasklist'),
 
   // Task plan percent
   getTaskPlanPercent: () => request<PlanPercentResponse>('GET', '/api/v1/task/plan/percent'),

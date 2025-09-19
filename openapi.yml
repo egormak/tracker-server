@@ -50,6 +50,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/stats/tasks/today:
+    get:
+      tags:
+        - Statistics
+      summary: Get today's tasks (planned vs done)
+      description: Alias of /api/v1/stats/done/today; returns TaskResult list
+      operationId: getStatsTasksToday
+      responses:
+        '200':
+          description: Successfully retrieved today's task results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskResult"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/task/params:
     get:
       tags:

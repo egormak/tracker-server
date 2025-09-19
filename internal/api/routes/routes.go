@@ -64,7 +64,9 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Routes
 
 	// Statistics
-	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone)
+	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone) // TODO Remove in future
+	// Alias for dashboard tasks list (today planned vs done)
+	api.Get("/v1/stats/tasks/today", statsHandler.StatCompletionTimeDone)
 
 	// General
 
