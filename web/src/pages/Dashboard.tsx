@@ -21,6 +21,7 @@ import { api, RestTimeResponse, RecordsSummary, TaskResult } from '../api/client
 import Alert from '../components/Alert'
 import Card from '../components/Card'
 import Progress from '../components/Progress'
+import { formatRestMinutes } from '../utils/format'
 
 export default function Dashboard() {
   const [records, setRecords] = useState<RecordsSummary | null>(null)
@@ -82,7 +83,7 @@ export default function Dashboard() {
     },
     rest && {
       label: 'Rest available',
-      value: `${rest.rest_time} min`,
+      value: `${formatRestMinutes(rest.rest_time)} min`,
       icon: <NightlightRoundOutlinedIcon fontSize="small" />,
     },
   ].filter(Boolean) as Array<{ label: string; value: string; icon: ReactNode; align?: 'flex-start' | 'flex-end' }>

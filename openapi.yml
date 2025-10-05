@@ -770,6 +770,74 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/manage/plan-percents:
+    get:
+      tags:
+        - Management
+      summary: Get plan percents configuration
+      operationId: getPlanPercents
+      responses:
+        '200':
+          description: Plan percents retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanPercentsResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/manage/plan-percents/{group}/{value}:
+    delete:
+      tags:
+        - Management
+      summary: Remove a plan percent value
+      operationId: removePlanPercent
+      parameters:
+        - name: group
+          in: path
+          required: true
+          description: Plan percent group to update
+          schema:
+            type: string
+            enum: [plan, work, learn, rest]
+        - name: value
+          in: path
+          required: true
+          description: Percent value to remove
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Plan percent removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '400':
+          description: Invalid group or value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '404':
+          description: Value not found in the specified group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/manage/procents:
     post:
       tags:
@@ -1006,6 +1074,71 @@ components:
           description: Optional; one of plan, work, learn, rest
       required:
         - procents
+
+    PlanPercentsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        data:
+          $ref: "#/components/schemas/PlanPercentsData"
+      required:
+        - status
+        - data
+      example:
+        status: "success"
+        data:
+          title: "Procent Info"
+          date: "1 January 2024"
+          current_choice: 0
+          plans:
+            - plan
+            - work
+            - learn
+            - rest
+          plan: [4, 8, 12]
+          work: [20, 25, 30]
+          learn: [10, 15]
+          rest: [5, 10]
+
+    PlanPercentsData:
+      type: object
+      properties:
+        title:
+          type: string
+        date:
+          type: string
+        current_choice:
+          type: integer
+        plans:
+          type: array
+          items:
+            type: string
+        plan:
+          type: array
+          items:
+            type: integer
+        work:
+          type: array
+          items:
+            type: integer
+        learn:
+          type: array
+          items:
+            type: integer
+        rest:
+          type: array
+          items:
+            type: integer
+      required:
+        - title
+        - date
+        - current_choice
+        - plans
+        - plan
+        - work
+        - learn
+        - rest
 
     TimerGlobalResponse:
       type: object

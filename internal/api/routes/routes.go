@@ -68,6 +68,10 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Alias for dashboard tasks list (today planned vs done)
 	api.Get("/v1/stats/tasks/today", statsHandler.StatCompletionTimeDone)
 
+	// Plan Percents
+	api.Get("/v1/manage/plan-percents", manageHandler.GetPlanPercents)                    // New route for plan percents
+	api.Delete("/v1/manage/plan-percents/:group/:value", manageHandler.DeletePlanPercent) // Remove specific plan percent
+
 	// General
 
 	api.Post("/v1/timer/set", manageHandlerOld.TimerSet)
@@ -95,6 +99,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	//Manage
 	api.Post("/v1/manage/procents", manageHandlerOld.ProcentsSet)
+	api.Get("/v1/manage/procents", manageHandlerOld.GetPlanProcents)
 	api.Get("/v1/manage/timer/recheck", manageHandlerOld.TimerRecheck)
 	api.Post("/v1/manage/timer/global", manageHandlerOld.TimerGlobalSet)
 	api.Get("/v1/manage/timer/global", manageHandlerOld.TimerGlobalGet)

@@ -26,15 +26,22 @@ func (s *TaskRecordService) GetTaskPlanPercent() (entity.PlanPercentResponse, er
 				if err := s.st.CheckIfPlanPercentEmpty(); err != nil {
 					if err == storage.ErrAllEmpty {
 						return entity.PlanPercentResponse{}, storage.ErrAllEmpty
-					} else {
-						errMsg := fmt.Errorf("can't check if plan percent empty: %s", err)
-						slog.Error("task_record_service, get_task_plan_percent:check_if_plan_percent_empty", "err", errMsg)
-						return entity.PlanPercentResponse{}, errMsg
 					}
+					errMsg := fmt.Errorf("can't check if plan percent empty: %s", err)
+					slog.Error("task_record_service, get_task_plan_percent:check_if_plan_percent_empty", "err", errMsg)
+					return entity.PlanPercentResponse{}, errMsg
 				}
+				if err := s.st.ChangeGroupPlanPercent(GroupPlanOrdinal); err != nil {
+					errMsg := fmt.Errorf("can't advance group plan percent: %s", err)
+					slog.Error("task_record_service, get_task_plan_percent:change_group_plan_percent", "err", errMsg)
+					return entity.PlanPercentResponse{}, errMsg
+				}
+				continue
 			}
+			errMsg := fmt.Errorf("can't get group percent: %s", err)
+			slog.Error("task_record_service, get_task_plan_percent:get_group_percent", "err", errMsg)
+			return entity.PlanPercentResponse{}, errMsg
 		}
-		s.st.ChangeGroupPlanPercent(GroupPlanOrdinal)
 		groupName, err := s.st.GetGroupName(GroupPlanOrdinal)
 		if err != nil {
 			errMsg := fmt.Errorf("can't get group name: %s", err)
@@ -56,13 +63,14 @@ func (s *TaskRecordService) GetTaskPlanPercent() (entity.PlanPercentResponse, er
 				TimeLeft: timeLeft,
 			}
 			break
-		} else if TaskNamePlanPercent == "" {
-			if err := s.st.DelGroupPercent(groupName); err != nil {
-				errMsg := fmt.Errorf("can't delete group percent: %s", err)
-				slog.Error("task_record_service, get_task_plan_percent:del_group_percent", "err", errMsg)
-				return entity.PlanPercentResponse{}, errMsg
-			}
 		}
+		if err := s.st.DelGroupPercent(groupName); err != nil {
+			errMsg := fmt.Errorf("can't delete group percent: %s", err)
+			slog.Error("task_record_service, get_task_plan_percent:del_group_percent", "err", errMsg)
+			return entity.PlanPercentResponse{}, errMsg
+		}
+		// Try the next available percent within the same group.
+		continue
 	}
 
 	return planPercent, nil

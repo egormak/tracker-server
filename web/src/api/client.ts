@@ -1,7 +1,7 @@
 // If not provided, use same-origin ('') which works with Vite dev proxy
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
-type HttpMethod = 'GET' | 'POST'
+type HttpMethod = 'GET' | 'POST' | 'DELETE'
 
 async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -33,6 +33,22 @@ export interface PlanPercentResponse {
   time_left: number
 }
 
+export interface PlanPercentsResponse {
+  status: string
+  data: {
+    title: string
+    date: string
+    current_choice: number
+    plans: string[]
+    plan: number[]
+    work: number[]
+    learn: number[]
+    rest: number[]
+  }
+}
+
+export type PlanPercentGroup = 'plan' | 'work' | 'learn' | 'rest'
+
 export interface RestTimeResponse { rest_time: number }
 export interface SuccessResponse { status: string; message?: string }
 
@@ -61,9 +77,12 @@ export const api = {
 
   // Task plan percent
   getTaskPlanPercent: () => request<PlanPercentResponse>('GET', '/api/v1/task/plan/percent'),
+  getPlanPercents: () => request<PlanPercentsResponse>('GET', '/api/v1/manage/plan-percents'),
   changeLegacyPlanPercent: () => request<SuccessResponse>('GET', '/api/v1/task/plan-percent/change'),
   setProcents: (procents: number[], role_name?: string) =>
     request<SuccessResponse>('POST', '/api/v1/manage/procents', { procents, role_name }),
+  removePlanPercent: (group: PlanPercentGroup, value: number) =>
+    request<SuccessResponse>('DELETE', `/api/v1/manage/plan-percents/${group}/${value}`),
 
   // Records
   addTaskRecord: (payload: TaskRecordRequest) => request<SuccessResponse>('POST', '/api/v1/taskrecord', payload),

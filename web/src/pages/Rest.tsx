@@ -11,6 +11,7 @@ import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded'
 import { api } from '../api/client'
 import Alert from '../components/Alert'
 import Card from '../components/Card'
+import { formatRestMinutes } from '../utils/format'
 
 export default function Rest() {
   const [rest, setRest] = useState<number | null>(null)
@@ -40,6 +41,8 @@ export default function Rest() {
     } catch (e: any) { setError(e.message) }
   }
 
+  const formattedRest = formatRestMinutes(rest)
+
   return (
     <Grid container spacing={3}>
       <Grid item xs={12} md={6}>
@@ -47,7 +50,10 @@ export default function Rest() {
           {error && <Alert type="error">{error}</Alert>}
           {msg && <Alert type="success">{msg}</Alert>}
           <Stack spacing={3}>
-            <Typography variant="h3">{rest ?? '-'} min</Typography>
+            <Typography variant="h3">
+              {formattedRest}
+              {formattedRest === '-' ? '' : ' min'}
+            </Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start">
               <TextField
                 label="Minutes"

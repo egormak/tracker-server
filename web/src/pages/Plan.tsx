@@ -12,6 +12,7 @@ import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
 import { api, PlanPercentResponse } from '../api/client'
 import Alert from '../components/Alert'
 import Card from '../components/Card'
+import PlanPercents from '../components/PlanPercents'
 
 export default function Plan() {
   const [plan, setPlan] = useState<PlanPercentResponse | null>(null)
@@ -117,6 +118,11 @@ export default function Plan() {
             </Stack>
           </Stack>
         </Card>
+      </Grid>
+      
+      {/* Add the PlanPercents component to show all plan percents */}
+      <Grid item xs={12}>
+        <PlanPercents />
       </Grid>
     </Grid>
   )

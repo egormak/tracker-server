@@ -30,6 +30,7 @@ type Storage interface {
 	ChangeGroupPlanPercent(groupPlan int) error
 	GetGroupPercent(groupPlan int) (int, error)
 	DelGroupPercent(groupPlan string) error
+	RemovePlanPercent(group string, value int) error
 	GetTaskNamePlanPercent(groupPlan string, groupPercent int) (string, error)
 	CheckIfPlanPercentEmpty() error
 	GetGroupName(groupNameOrdinal int) (string, error)

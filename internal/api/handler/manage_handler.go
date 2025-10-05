@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"tracker-server/internal/services"
 	"tracker-server/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
@@ -11,6 +14,8 @@ import (
 // ManageService defines the interface for the manage service
 type ManageService interface {
 	CreateTaskWithRole(taskName string, role string) error
+	GetPlanPercents() (interface{}, error) // Review to DDD logic
+	RemovePlanPercent(group string, value int) error
 }
 
 // ManageHandler handles task management operations
@@ -77,6 +82,73 @@ func (m *ManageHandler) CreateTask(c *fiber.Ctx) error {
 	return c.Status(201).JSON(&fiber.Map{
 		"status":  "success",
 		"message": "Task created successfully",
+	})
+}
+
+// GetPlanPercents handles retrieving the plan percent values for plan, work, learn and rest
+func (m *ManageHandler) GetPlanPercents(c *fiber.Ctx) error {
+	slog.Info("Request received: Get plan percents")
+
+	percents, err := m.srv.GetPlanPercents()
+	if err != nil {
+		slog.Error("Failed to get plan percents", "error", err)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": fmt.Sprintf("Failed to get plan percents: %v", err),
+		})
+	}
+
+	return c.Status(200).JSON(&fiber.Map{
+		"status": "success",
+		"data":   percents,
+	})
+}
+
+// DeletePlanPercent handles removing a specific percent value from a plan group
+func (m *ManageHandler) DeletePlanPercent(c *fiber.Ctx) error {
+	group := c.Params("group")
+	valueStr := c.Params("value")
+
+	if group == "" || valueStr == "" {
+		return c.Status(400).JSON(&fiber.Map{
+			"status":  "error",
+			"message": "Group and value are required",
+		})
+	}
+
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return c.Status(400).JSON(&fiber.Map{
+			"status":  "error",
+			"message": "Value must be a number",
+		})
+	}
+
+	if err := m.srv.RemovePlanPercent(group, value); err != nil {
+		switch {
+		case errors.Is(err, services.ErrInvalidPlanPercentGroup), errors.Is(err, services.ErrInvalidPlanPercentValue):
+			return c.Status(400).JSON(&fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+			})
+		case errors.Is(err, services.ErrPlanPercentValueNotFound):
+			return c.Status(404).JSON(&fiber.Map{
+				"status":  "error",
+				"message": err.Error(),
+			})
+		default:
+			slog.Error("Failed to remove plan percent", "error", err, "group", group, "value", value)
+			return c.Status(500).JSON(&fiber.Map{
+				"status":  "error",
+				"message": fmt.Sprintf("Failed to remove plan percent: %v", err),
+			})
+		}
+	}
+
+	slog.Info("Removed plan percent", "group", group, "value", value)
+	return c.Status(200).JSON(&fiber.Map{
+		"status":  "success",
+		"message": "Plan percent removed",
 	})
 }
 

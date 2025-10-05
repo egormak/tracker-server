@@ -180,6 +180,25 @@ func (s *Storage) DelGroupPercent(groupPlanName string) error {
 	return nil
 }
 
+func (s *Storage) RemovePlanPercent(group string, value int) error {
+	database := s.Client.Database(dbName)
+	coll := database.Collection(taskInfo)
+
+	filter := bson.M{"title": procentDocName}
+	update := bson.M{"$pull": bson.M{group: value}}
+
+	res, err := coll.UpdateOne(s.Context, filter, update)
+	if err != nil {
+		return fmt.Errorf("remove-plan-percent error in updateone: %s", err)
+	}
+
+	if res.ModifiedCount == 0 {
+		return storage.ErrPlanPercentValueNotFound
+	}
+
+	return nil
+}
+
 func (s *Storage) GetTaskNamePlanPercent(groupName string, groupPercent int) (string, error) {
 
 	PriorityTasks, err := s.GetTasksbyPriority(groupName)

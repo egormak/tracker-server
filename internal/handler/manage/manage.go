@@ -19,6 +19,33 @@ func New(st storage.Storage, ntf notify.Notify) *Manage {
 	return &Manage{st: st, ntf: ntf}
 }
 
+func (m *Manage) GetPlanProcents(c *fiber.Ctx) error {
+	log.Info("Get request GetPlanProcents")
+
+	procents, err := m.st.GetPlanProcents()
+	if err != nil {
+		slog.Error("Error getting plan procents", "err", err)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(200).JSON(&fiber.Map{
+		"status": "success",
+		"data": fiber.Map{
+			"title":          procents.Title,
+			"date":           procents.Date,
+			"current_choice": procents.CurrentChoice,
+			"plans":          procents.Plans,
+			"plan":           procents.Plan,
+			"work":           procents.Work,
+			"learn":          procents.Learn,
+			"rest":           procents.Rest,
+		},
+	})
+}
+
 func (m *Manage) ProcentsSet(c *fiber.Ctx) error {
 
 	log.Info("Get request ProcentsSet")
