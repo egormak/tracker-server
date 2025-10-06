@@ -73,22 +73,21 @@ func (m *ManageService) CreateTaskWithRole(taskName string, role string) error {
 
 // GetPlanPercents retrieves the plan percents for plan, work, learn and rest
 // Returns the plan percents data or an error if retrieval fails
-func (m *ManageService) GetPlanPercents() (interface{}, error) {
+func (m *ManageService) GetPlanPercents() (*entity.PlanPercents, error) {
 	procents, err := m.st.GetPlanProcents()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plan percents: %w", err)
 	}
 
-	// Convert to a map for JSON response
-	result := map[string]interface{}{
-		"title":          procents.Title,
-		"date":           procents.Date,
-		"current_choice": procents.CurrentChoice,
-		"plans":          procents.Plans,
-		"plan":           procents.Plan,
-		"work":           procents.Work,
-		"learn":          procents.Learn,
-		"rest":           procents.Rest,
+	result := &entity.PlanPercents{
+		Title:         procents.Title,
+		Date:          procents.Date,
+		CurrentChoice: procents.CurrentChoice,
+		Plans:         procents.Plans,
+		Plan:          procents.Plan,
+		Work:          procents.Work,
+		Learn:         procents.Learn,
+		Rest:          procents.Rest,
 	}
 
 	return result, nil

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/services"
 	"tracker-server/internal/storage"
 
@@ -14,7 +15,7 @@ import (
 // ManageService defines the interface for the manage service
 type ManageService interface {
 	CreateTaskWithRole(taskName string, role string) error
-	GetPlanPercents() (interface{}, error) // Review to DDD logic
+	GetPlanPercents() (*entity.PlanPercents, error)
 	RemovePlanPercent(group string, value int) error
 }
 
