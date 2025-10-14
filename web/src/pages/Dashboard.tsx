@@ -102,37 +102,40 @@ export default function Dashboard() {
           ) : (
             <Stack spacing={3}>
               <Grid container spacing={2}>
-                {overviewItems.map((item) => (
-                  <Grid item xs={12} sm={6} key={item.label}>
-                    <Stack
-                      spacing={1}
-                      alignItems={item.align || 'flex-start'}
-                      sx={{
-                        p: 2.2,
-                        borderRadius: 3,
-                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(8, 20, 38, 0.4))',
-                        border: '1px solid rgba(99, 102, 241, 0.22)',
-                      }}
-                    >
-                      <Avatar
+                {overviewItems.map((item) => {
+                  const textAlign = item.align === 'flex-end' ? 'right' : 'left'
+                  return (
+                    <Grid item xs={12} sm={6} key={item.label}>
+                      <Stack
+                        spacing={1}
+                        alignItems={item.align || 'flex-start'}
                         sx={{
-                          width: 38,
-                          height: 38,
-                          bgcolor: 'rgba(99, 102, 241, 0.2)',
-                          color: 'primary.main',
+                          p: 2.2,
+                          borderRadius: 3,
+                          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(8, 20, 38, 0.4))',
+                          border: '1px solid rgba(99, 102, 241, 0.22)',
                         }}
                       >
-                        {item.icon}
-                      </Avatar>
-                      <Box textAlign={item.align || 'left'}>
-                        <Typography variant="overline" color="text.secondary" letterSpacing={0.6}>
-                          {item.label}
-                        </Typography>
-                        <Typography variant="h5">{item.value}</Typography>
-                      </Box>
-                    </Stack>
-                  </Grid>
-                ))}
+                        <Avatar
+                          sx={{
+                            width: 38,
+                            height: 38,
+                            bgcolor: 'rgba(99, 102, 241, 0.2)',
+                            color: 'primary.main',
+                          }}
+                        >
+                          {item.icon}
+                        </Avatar>
+                        <Box textAlign={textAlign}>
+                          <Typography variant="overline" color="text.secondary" letterSpacing={0.6}>
+                            {item.label}
+                          </Typography>
+                          <Typography variant="h5">{item.value}</Typography>
+                        </Box>
+                      </Stack>
+                    </Grid>
+                  )
+                })}
               </Grid>
               <Stack spacing={1.5}>
                 <Typography variant="subtitle2" color="text.secondary">

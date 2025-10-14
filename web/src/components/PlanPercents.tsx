@@ -51,36 +51,39 @@ export default function PlanPercents() {
     }
   }
 
-  const renderPercentList = (group: PlanPercentGroup, title: string, values: number[]) => (
-    <Stack spacing={1}>
-      <Typography variant="h6" fontWeight={600}>
-        {title}
-      </Typography>
-      <Stack direction="row" spacing={1} flexWrap="wrap">
-        {values.length > 0 ? (
-          values.map((value, index) => {
-            const chipKey = `${group}-${value}`
-            return (
-            <Chip
-              key={index}
-              label={`${value}%`}
-              size="small"
-              color={index === 0 ? 'primary' : 'default'}
-              variant={index === 0 ? 'filled' : 'outlined'}
-              onDelete={() => handleRemove(group, value)}
-              deleteIcon={removing === chipKey ? <CircularProgress size={14} /> : undefined}
-              disabled={loading || removing === chipKey}
-            />
-            )
-          })
-        ) : (
-          <Typography variant="body2" color="text.secondary">
-            No percents set
-          </Typography>
-        )}
+  const renderPercentList = (group: PlanPercentGroup, title: string, values?: number[] | null) => {
+    const list = Array.isArray(values) ? values : []
+    return (
+      <Stack spacing={1}>
+        <Typography variant="h6" fontWeight={600}>
+          {title}
+        </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap">
+          {list.length > 0 ? (
+            list.map((value, index) => {
+              const chipKey = `${group}-${value}`
+              return (
+                <Chip
+                  key={chipKey}
+                  label={`${value}%`}
+                  size="small"
+                  color={index === 0 ? 'primary' : 'default'}
+                  variant={index === 0 ? 'filled' : 'outlined'}
+                  onDelete={() => handleRemove(group, value)}
+                  deleteIcon={removing === chipKey ? <CircularProgress size={14} /> : undefined}
+                  disabled={loading || removing === chipKey}
+                />
+              )
+            })
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No percents set
+            </Typography>
+          )}
+        </Stack>
       </Stack>
-    </Stack>
-  )
+    )
+  }
 
   return (
     <Card title="Plan Percents" subtitle="View percents for plan, work, learn and rest" icon={<PieChartRoundedIcon />}>
@@ -94,7 +97,12 @@ export default function PlanPercents() {
         <Stack spacing={3}>
           <Box>
             <Typography variant="body1" gutterBottom>
-              Current Choice: <strong>{percents.data.plans[percents.data.current_choice]}</strong>
+              Current Choice:{' '}
+              <strong>
+                {Array.isArray(percents.data.plans)
+                  ? percents.data.plans[percents.data.current_choice] ?? 'No plan selected'
+                  : 'No plan selected'}
+              </strong>
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Date: {percents.data.date}
@@ -122,25 +130,25 @@ export default function PlanPercents() {
               Current Percent Distributions
             </Typography>
             <Stack spacing={2}>
-              {percents.data.plan.length > 0 && (
+              {Array.isArray(percents.data.plan) && percents.data.plan.length > 0 && (
                 <Box>
                   <Typography variant="body2">Plan: {percents.data.plan[0]}%</Typography>
                   <Progress value={percents.data.plan[0]} />
                 </Box>
               )}
-              {percents.data.work.length > 0 && (
+              {Array.isArray(percents.data.work) && percents.data.work.length > 0 && (
                 <Box>
                   <Typography variant="body2">Work: {percents.data.work[0]}%</Typography>
                   <Progress value={percents.data.work[0]} />
                 </Box>
               )}
-              {percents.data.learn.length > 0 && (
+              {Array.isArray(percents.data.learn) && percents.data.learn.length > 0 && (
                 <Box>
                   <Typography variant="body2">Learn: {percents.data.learn[0]}%</Typography>
                   <Progress value={percents.data.learn[0]} />
                 </Box>
               )}
-              {percents.data.rest.length > 0 && (
+              {Array.isArray(percents.data.rest) && percents.data.rest.length > 0 && (
                 <Box>
                   <Typography variant="body2">Rest: {percents.data.rest[0]}%</Typography>
                   <Progress value={percents.data.rest[0]} />

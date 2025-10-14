@@ -39,11 +39,11 @@ export interface PlanPercentsResponse {
     title: string
     date: string
     current_choice: number
-    plans: string[]
-    plan: number[]
-    work: number[]
-    learn: number[]
-    rest: number[]
+    plans: string[] | null
+    plan: number[] | null
+    work: number[] | null
+    learn: number[] | null
+    rest: number[] | null
   }
 }
 
