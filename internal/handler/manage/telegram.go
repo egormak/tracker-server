@@ -3,6 +3,7 @@ package manage
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -88,5 +89,46 @@ func (m *Manage) TelegramSendStop(c *fiber.Ctx) error {
 	return c.Status(200).JSON(&fiber.Map{
 		"status":  "accept",
 		"message": "Message Telegram Stop send",
+	})
+}
+
+func (m *Manage) TelegramSendCustom(c *fiber.Ctx) error {
+
+	slog.Info("Get request TelegramSendCustom")
+
+	var body struct {
+		Message string `json:"message"`
+	}
+
+	if err := c.BodyParser(&body); err != nil {
+		errMsg := fmt.Errorf("can't parse body: %s", err)
+		slog.Error("can't parse body", "error", errMsg)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": errMsg.Error(),
+		})
+	}
+
+	if strings.TrimSpace(body.Message) == "" {
+		errMsg := "Message is not set"
+		slog.Error("Message is not set", "error", errMsg)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": errMsg,
+		})
+	}
+
+	slog.Info("Send Telegram custom message")
+
+	if err := m.ntf.SendCustomMessage(body.Message); err != nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(200).JSON(&fiber.Map{
+		"status":  "accept",
+		"message": "Message Telegram send",
 	})
 }

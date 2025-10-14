@@ -58,3 +58,18 @@ func (t *Telegram) SendMessageStop(taskName string, timeDone int, msgID int, tim
 
 	return nil
 }
+
+func (t *Telegram) SendCustomMessage(message string) error {
+	if message == "" {
+		return fmt.Errorf("message is empty")
+	}
+
+	msg := tgbotapi.NewMessage(t.RoomID, message)
+	msg.ParseMode = "HTML"
+
+	if _, err := t.Bot.Send(msg); err != nil {
+		return err
+	}
+
+	return nil
+}

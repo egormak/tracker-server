@@ -105,6 +105,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Get("/v1/manage/timer/global", manageHandlerOld.TimerGlobalGet)
 	api.Post("/v1/manage/telegram/start", manageHandlerOld.TelegramSendStart)
 	api.Post("/v1/manage/telegram/stop", manageHandlerOld.TelegramSendStop)
+	api.Post("/v1/manage/telegram/message", manageHandlerOld.TelegramSendCustom)
 
 	app.Get("/", welcome.Welcome)
 }

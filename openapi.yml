@@ -435,6 +435,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/manage/telegram/message:
+    post:
+      tags:
+        - Management
+      summary: Send custom telegram notification
+      description: Send a custom notification message via Telegram
+      operationId: sendCustomTelegramNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramMessageRequest"
+      responses:
+        '200':
+          description: Notification sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/timer/del:
     post:
       deprecated: true
@@ -1338,6 +1365,17 @@ components:
         msg_id: 123456
         time_done: 45
         time_end: "2 January 2024 15:45"
+
+    TelegramMessageRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Message text to send to the Telegram chat
+      required:
+        - message
+      example:
+        message: "Daily plan reached!"
 
     SuccessResponse:
       type: object
