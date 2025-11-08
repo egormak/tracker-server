@@ -21,7 +21,7 @@ const (
 )
 
 var roleTypes = [3]string{"work", "learn", "rest"}
-var PlanTypesWeekDays = []string{"plan", "work", "work", "work", "work", "learn", "learn", "learn", "rest"}
+var PlanTypesWeekDays = []string{"plan", "work", "learn", "rest"}
 var PlanTypesWeekEndsDays = []string{"plan", "work", "learn", "rest"}
 var PlanTypes = []string{"plan", "work", "learn", "rest"}
 

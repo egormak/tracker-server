@@ -26,8 +26,20 @@
 ### Plan Percent Task Selection (GET `/api/v1/task/plan/percent`)
 1. Gets current plan group ordinal → fetches group percent
 2. Finds task name for that group+percent → calculates time remaining for today
-3. **After returning task**: Client must rotate to next percent or group (not automatic)
-4. Legacy endpoint `/api/v1/task/plan-percent/change` rotates the group
+3. **Auto-advance behavior**: If a group's percent list is empty, automatically rotates to next group via loop in `GetTaskPlanPercent()` method
+4. Legacy endpoint `/api/v1/task/plan-percent/change` manually rotates the group
+
+## Coding Style & Best Practices
+
+- **Go version**: 1.25.1 (specified in `go.mod`); **Note**: Dockerfile currently uses `golang:1.24.2` - version mismatch that should be resolved
+- **Formatting**: Use `gofmt`/`go fmt` and `go vet` before committing
+- **Naming conventions**: 
+  - Package names: lower_snakecase
+  - Files: `feature_action.go` pattern
+  - Exported: PascalCase; unexported: lowerCamelCase
+- **Layer separation**: Maintain clean boundaries: handlers → services → storage
+- **Logging**: Prefer `slog` with tint handler for new code; `logrus` remains in `main.go` for legacy reasons
+- **Error handling**: Wrap errors with context using `fmt.Errorf("context: %w", err)`
 
 ## Layer-Specific Patterns
 
@@ -79,8 +91,20 @@ cd web && npm install && npm run dev  # http://localhost:5173
 ### Full Stack with Docker Compose
 ```bash
 make compose-up            # API (:3000), Web (:8080), Mongo (:27017)
-make compose-logs          # Tail logs
-make compose-down          # Stop and cleanup
+make compose-logs          # Tail logs (shows last 200 lines)
+make compose-down          # Stop and cleanup (removes volumes)
+```
+
+### Docker Operations
+```bash
+make docker-build TAG=2024-11-08  # Build backend image with tag
+make docker-run TAG=2024-11-08    # Run backend in dev mode (maps 3000)
+make docker-prod                  # Run as 'tracker' container (maps 8080→3000)
+make docker-stop                  # Stop and remove 'tracker' container
+
+# Web UI Docker
+make web-docker-build TAG=2024-11-08  # Build web UI image
+make web-docker-run                    # Run on :5173
 ```
 
 ### Code Quality & Build
@@ -102,25 +126,36 @@ make test                  # Run all tests (currently no test files exist)
 - `POST /api/v1/taskrecord` - Add task time record (main interaction)
 - `GET /api/v1/task/plan/percent` - Get next task by plan percentage
 - `GET /api/v1/stats/done/today` - Today's task completion stats
+- `GET /api/v1/stats/tasks/today` - Alias for stats/done/today (dashboard)
 - `GET /api/v1/rest/get` - Current rest balance
+- `POST /api/v1/rest/add` - Add rest time
+- `POST /api/v1/rest/spend` - Spend rest time
 - `POST /api/v1/manage/task/create` - Create new task definition
+- `GET /api/v1/manage/plan-percents` - Get plan percents configuration
+- `DELETE /api/v1/manage/plan-percents/:group/:value` - Remove specific plan percent
+- `GET /api/v1/timer/get` - Get timer value
+- `POST /api/v1/timer/set` - Set timer value
 
 ## Web UI Integration
 
-- **Tech**: React + TypeScript + Vite + MUI
+- **Tech**: React + TypeScript + Vite + MUI (Material-UI v6)
 - **API client**: `web/src/api/client.ts` with typed interfaces matching OpenAPI
-- **Dev proxy**: Vite proxies `/api` to backend (configured in `vite.config.ts`)
+- **Dev proxy**: Vite proxies `/api` to `http://localhost:3000` (configured in `vite.config.ts`)
 - **Production**: Set `VITE_API_BASE_URL` environment variable or use same-origin deployment
 - **Pages**: Dashboard, Plan, Record, Rest, Manage, Timer (see `web/src/pages/`)
+- **Docker**: Web UI uses nginx:1.27-alpine with custom nginx.conf, serves on port 80
+- **Build**: `make web-build` creates production build in `web/dist`
 
 ## Common Gotchas
 
 1. **No tests exist yet**: Project has test infrastructure (`make test`) but no `*_test.go` files
 2. **Date format consistency**: Always use `"2 January 2006"` for task records (not RFC3339)
 3. **Handler migration in progress**: Some routes use old handlers (`internal/handler/`), some use new (`internal/api/handler/`)
-4. **Plan percent state**: System doesn't auto-advance to next task; client must call change endpoint
-5. **Rest balance**: Adding task records automatically adds rest time; no manual adjustment needed unless spending rest
+4. **Plan percent auto-advance**: The `GetTaskPlanPercent` method automatically handles group rotation when lists are empty via a loop
+5. **Rest balance**: Adding task records automatically adds rest time (via `AddRest()` in service); no manual adjustment needed unless spending rest
 6. **MongoDB connection**: No authentication configured; adjust for production use
+7. **Dual logging**: Uses both `slog` (with tint handler) and `logrus`; prefer `slog` for new code
+8. **Dockerfile Go version**: Dockerfile uses `golang:1.24.2` but go.mod specifies `1.25.1` - version mismatch to resolve
 
 ## Adding New Features
 
@@ -153,6 +188,7 @@ func (s *Storage) GetFoo(id string) (Foo, error) {
 
 - **Fiber v2**: HTTP framework (Express-like for Go)
 - **MongoDB Driver**: `go.mongodb.org/mongo-driver/mongo`
-- **slog**: Structured logging (Go 1.21+ standard library)
-- **Telegram Bot API**: Optional notifications via `internal/notify/telegram/`
+- **slog**: Structured logging (Go 1.21+ standard library) with tint handler (`github.com/lmittmann/tint`)
+- **logrus**: Legacy logging (`github.com/sirupsen/logrus`) - used in main.go, consider migrating to slog
+- **Telegram Bot API**: Optional notifications via `internal/notify/telegram/` (`github.com/go-telegram-bot-api/telegram-bot-api/v5`)
 - **YAML v3**: Config file parsing (`gopkg.in/yaml.v3`)
