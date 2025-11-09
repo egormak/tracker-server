@@ -21,18 +21,21 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	restService := services.NewRestService(mongoconn)
 	statsService := services.NewStatisticService(mongoconn)
 	manageService := services.NewManageService(mongoconn)
+	scheduleService := services.NewScheduleService(mongoconn)
 
 	// Handlers
 	// Task
 	taskHandler := handler.NewTaskHandler(taskService)
 	// TaskRecords
-	taskRecordHandler := handler.NewTaskRecordHandler(taskRecordService)
+	taskRecordHandler := handler.NewTaskRecordHandlerWithSchedule(taskRecordService, scheduleService)
 	// Rest
 	restHandler := handler.NewRestHandler(restService)
 	// Statistics
 	statsHandler := handler.NewStatisticHandler(statsService)
 	// Manage
 	manageHandler := handler.NewManageHandler(manageService)
+	// Schedule
+	scheduleHandler := handler.NewScheduleHandler(scheduleService)
 
 	// OLD Logic
 	recordHandler := record.New(mongoconn, notify)
@@ -50,6 +53,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
 	// api.Get("/v1/task/next", taskRecordHandler.TasksNext)
 	api.Get("/v1/task/plan/percent", taskRecordHandler.GetTaskPlanPercent)
+	api.Get("/v1/task/plan/percent/schedule", taskRecordHandler.GetTaskPlanPercentWithSchedule)
 	// Rest
 	api.Post("/v1/rest/add", restHandler.RestAdd)
 	api.Post("/v1/rest-spend", restHandler.RestSpend) // Remove in future
@@ -106,6 +110,17 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/manage/telegram/start", manageHandlerOld.TelegramSendStart)
 	api.Post("/v1/manage/telegram/stop", manageHandlerOld.TelegramSendStop)
 	api.Post("/v1/manage/telegram/message", manageHandlerOld.TelegramSendCustom)
+
+	// Schedule
+	api.Post("/v1/schedule", scheduleHandler.CreateSchedule)
+	api.Get("/v1/schedule/active", scheduleHandler.GetActiveSchedule)
+	api.Get("/v1/schedule/active/today", scheduleHandler.GetTodaySchedule)
+	api.Get("/v1/schedule/active/rollover", scheduleHandler.GetRolloverTasks)
+	api.Post("/v1/schedule/apply", scheduleHandler.ApplySchedule)
+	api.Get("/v1/schedule/:id", scheduleHandler.GetSchedule)
+	api.Put("/v1/schedule/:id", scheduleHandler.UpdateSchedule)
+	api.Delete("/v1/schedule/:id", scheduleHandler.DeleteSchedule)
+	api.Put("/v1/schedule/:id/activate", scheduleHandler.SetActiveSchedule)
 
 	app.Get("/", welcome.Welcome)
 }

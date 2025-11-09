@@ -25,6 +25,8 @@ tags:
     description: Timer operations
   - name: Management
     description: System management operations
+  - name: Schedule
+    description: Weekly schedule management with automatic rollover logic
 
 paths:
   /api/v1/stats/done/today:
@@ -455,6 +457,324 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # Schedule endpoints
+  /api/v1/schedule:
+    post:
+      tags:
+        - Schedule
+      summary: Create weekly schedule
+      description: Create a new weekly schedule configuration
+      operationId: createSchedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleRequest"
+      responses:
+        '201':
+          description: Schedule created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      schedule_id:
+                        type: string
+                      is_active:
+                        type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/schedule/active:
+    get:
+      tags:
+        - Schedule
+      summary: Get active schedule
+      description: Retrieve the currently active weekly schedule
+      operationId: getActiveSchedule
+      responses:
+        '200':
+          description: Active schedule retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/WeeklySchedule"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/schedule/active/today:
+    get:
+      tags:
+        - Schedule
+      summary: Get today's schedule with rollovers
+      description: Returns today's scheduled tasks merged with incomplete tasks from previous days
+      operationId: getTodaySchedule
+      responses:
+        '200':
+          description: Today's schedule with rollovers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/ActiveSchedule"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/schedule/active/rollover:
+    get:
+      tags:
+        - Schedule
+      summary: Get rollover tasks
+      description: Get incomplete tasks from previous days
+      operationId: getRolloverTasks
+      parameters:
+        - name: day
+          in: query
+          schema:
+            type: string
+          description: Day to calculate rollovers for (defaults to today)
+      responses:
+        '200':
+          description: Rollover tasks retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      day:
+                        type: string
+                      rollover_tasks:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/RolloverTask"
+                      count:
+                        type: integer
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/schedule/apply:
+    post:
+      tags:
+        - Schedule
+      summary: Apply schedule for today
+      description: Creates TaskDefinitions for today based on active schedule
+      operationId: applySchedule
+      responses:
+        '200':
+          description: Schedule applied successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/schedule/{id}:
+    get:
+      tags:
+        - Schedule
+      summary: Get schedule by ID
+      description: Retrieve a specific schedule by its ID
+      operationId: getSchedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Schedule ID
+      responses:
+        '200':
+          description: Schedule retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/WeeklySchedule"
+        '400':
+          description: Invalid ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+        - Schedule
+      summary: Update schedule
+      description: Update an existing schedule
+      operationId: updateSchedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Schedule ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                monday:
+                  $ref: "#/components/schemas/DaySchedule"
+                tuesday:
+                  $ref: "#/components/schemas/DaySchedule"
+                wednesday:
+                  $ref: "#/components/schemas/DaySchedule"
+                thursday:
+                  $ref: "#/components/schemas/DaySchedule"
+                friday:
+                  $ref: "#/components/schemas/DaySchedule"
+                saturday:
+                  $ref: "#/components/schemas/DaySchedule"
+                sunday:
+                  $ref: "#/components/schemas/DaySchedule"
+      responses:
+        '200':
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+        - Schedule
+      summary: Delete schedule
+      description: Delete a schedule by ID
+      operationId: deleteSchedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Schedule ID
+      responses:
+        '200':
+          description: Schedule deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '400':
+          description: Invalid ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/schedule/{id}/activate:
+    put:
+      tags:
+        - Schedule
+      summary: Activate schedule
+      description: Set a specific schedule as active (deactivates all others)
+      operationId: activateSchedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Schedule ID
+      responses:
+        '200':
+          description: Schedule activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '400':
+          description: Invalid ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         '500':
           description: Internal server error
           content:
@@ -1405,3 +1725,210 @@ components:
       example:
         status: "error"
         message: "An error occurred"
+
+    # Schedule schemas
+    ScheduleTask:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Task name
+        role:
+          type: string
+          enum: ["work", "learn", "rest"]
+          description: Task role/category
+        time:
+          type: integer
+          description: Time allocated in minutes
+        priority:
+          type: integer
+          description: Task priority (higher = more important)
+        percents:
+          type: array
+          items:
+            type: integer
+          description: Percent values for plan rotation
+      required:
+        - name
+        - role
+        - time
+        - priority
+      example:
+        name: "work"
+        role: "work"
+        time: 313
+        priority: 9
+        percents: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+
+    DaySchedule:
+      type: object
+      properties:
+        day:
+          type: string
+          enum: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+          description: Day of the week
+        total_time:
+          type: integer
+          description: Total time available for the day in minutes
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleTask"
+          description: Tasks scheduled for this day
+        plan_group:
+          type: array
+          items:
+            type: string
+          description: Order of plan groups
+      required:
+        - day
+        - total_time
+        - tasks
+        - plan_group
+      example:
+        day: "monday"
+        total_time: 900
+        plan_group: ["plan", "work", "learn", "rest"]
+        tasks:
+          - name: "work"
+            role: "work"
+            time: 313
+            priority: 9
+            percents: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+
+    WeeklySchedule:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Schedule ID
+        title:
+          type: string
+          description: Schedule title
+        created_at:
+          type: string
+          description: Creation date
+        updated_at:
+          type: string
+          description: Last update date
+        is_active:
+          type: boolean
+          description: Whether this schedule is active
+        monday:
+          $ref: "#/components/schemas/DaySchedule"
+        tuesday:
+          $ref: "#/components/schemas/DaySchedule"
+        wednesday:
+          $ref: "#/components/schemas/DaySchedule"
+        thursday:
+          $ref: "#/components/schemas/DaySchedule"
+        friday:
+          $ref: "#/components/schemas/DaySchedule"
+        saturday:
+          $ref: "#/components/schemas/DaySchedule"
+        sunday:
+          $ref: "#/components/schemas/DaySchedule"
+      required:
+        - title
+        - is_active
+        - monday
+        - tuesday
+        - wednesday
+        - thursday
+        - friday
+        - saturday
+        - sunday
+
+    ScheduleRequest:
+      type: object
+      properties:
+        schedule:
+          type: object
+          properties:
+            monday:
+              $ref: "#/components/schemas/DaySchedule"
+            tuesday:
+              $ref: "#/components/schemas/DaySchedule"
+            wednesday:
+              $ref: "#/components/schemas/DaySchedule"
+            thursday:
+              $ref: "#/components/schemas/DaySchedule"
+            friday:
+              $ref: "#/components/schemas/DaySchedule"
+            saturday:
+              $ref: "#/components/schemas/DaySchedule"
+            sunday:
+              $ref: "#/components/schemas/DaySchedule"
+        set_active:
+          type: boolean
+          description: Whether to set this schedule as active
+          default: false
+      required:
+        - schedule
+
+    RolloverTask:
+      type: object
+      properties:
+        task_name:
+          type: string
+          description: Task name
+        role:
+          type: string
+          description: Task role
+        priority:
+          type: integer
+          description: Task priority
+        remaining_time:
+          type: integer
+          description: Time remaining to complete in minutes
+        source_day:
+          type: string
+          description: Which day this task was originally scheduled
+        percent:
+          type: integer
+          description: The percent allocation it belongs to
+      required:
+        - task_name
+        - role
+        - priority
+        - remaining_time
+        - source_day
+        - percent
+      example:
+        task_name: "work"
+        role: "work"
+        priority: 9
+        remaining_time: 100
+        source_day: "monday"
+        percent: 50
+
+    ActiveSchedule:
+      type: object
+      properties:
+        day:
+          type: string
+          description: Current day
+        total_time:
+          type: integer
+          description: Total time available
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleTask"
+          description: Today's scheduled tasks
+        rollover_tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/RolloverTask"
+          description: Incomplete tasks from previous days
+        plan_group:
+          type: array
+          items:
+            type: string
+          description: Plan group rotation order
+      required:
+        - day
+        - total_time
+        - tasks
+        - rollover_tasks
+        - plan_group

@@ -7,6 +7,7 @@ import Rest from './pages/Rest'
 import Record from './pages/Record'
 import Manage from './pages/Manage'
 import Timer from './pages/Timer'
+import Schedule from './pages/Schedule'
 import Header from './components/Header'
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/record" element={<Record />} />
           <Route path="/manage" element={<Manage />} />
           <Route path="/timer" element={<Timer />} />
+          <Route path="/schedule" element={<Schedule />} />
         </Routes>
       </Container>
     </Box>

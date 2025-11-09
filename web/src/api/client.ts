@@ -1,7 +1,7 @@
 // If not provided, use same-origin ('') which works with Vite dev proxy
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
-type HttpMethod = 'GET' | 'POST' | 'DELETE'
+type HttpMethod = 'GET' | 'POST' | 'DELETE' | 'PUT'
 
 async function request<T>(method: HttpMethod, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -65,6 +65,79 @@ export interface RecordsSummary {
   all: Record<string, number>
 }
 
+// Schedule types
+export interface ScheduleTask {
+  name: string
+  role: 'work' | 'learn' | 'rest'
+  time: number
+  priority: number
+  percents?: number[]
+}
+
+export interface DaySchedule {
+  day: string
+  total_time: number
+  tasks: ScheduleTask[]
+  plan_group: string[]
+}
+
+export interface WeeklySchedule {
+  id?: string
+  title: string
+  created_at?: string
+  updated_at?: string
+  is_active: boolean
+  monday: DaySchedule
+  tuesday: DaySchedule
+  wednesday: DaySchedule
+  thursday: DaySchedule
+  friday: DaySchedule
+  saturday: DaySchedule
+  sunday: DaySchedule
+}
+
+export interface ScheduleRequest {
+  schedule: Omit<WeeklySchedule, 'id' | 'title' | 'created_at' | 'updated_at' | 'is_active'>
+  set_active?: boolean
+}
+
+export interface RolloverTask {
+  task_name: string
+  role: string
+  priority: number
+  remaining_time: number
+  source_day: string
+  percent: number
+}
+
+export interface ActiveSchedule {
+  day: string
+  total_time: number
+  tasks: ScheduleTask[]
+  rollover_tasks: RolloverTask[]
+  plan_group: string[]
+}
+
+export interface ScheduleResponse {
+  status: string
+  data?: WeeklySchedule
+  message?: string
+}
+
+export interface ActiveScheduleResponse {
+  status: string
+  data: ActiveSchedule
+}
+
+export interface RolloverResponse {
+  status: string
+  data: {
+    day: string
+    rollover_tasks: RolloverTask[]
+    count: number
+  }
+}
+
 // API wrappers
 export const api = {
   // Statistics
@@ -98,4 +171,24 @@ export const api = {
   // Timer
   timerGet: () => request<TimerResponse>('GET', '/api/v1/timer/get'),
   timerSet: (payload: TimerSetRequest) => request<SuccessResponse>('POST', '/api/v1/timer/set', payload),
+
+  // Schedule
+  createSchedule: (payload: ScheduleRequest) => 
+    request<{ status: string; data: { schedule_id: string; is_active: boolean }; message: string }>('POST', '/api/v1/schedule', payload),
+  getActiveSchedule: () => 
+    request<{ status: string; data: WeeklySchedule }>('GET', '/api/v1/schedule/active'),
+  getSchedule: (id: string) => 
+    request<{ status: string; data: WeeklySchedule }>('GET', `/api/v1/schedule/${id}`),
+  updateSchedule: (id: string, schedule: Omit<WeeklySchedule, 'id' | 'title' | 'created_at' | 'updated_at' | 'is_active'>) => 
+    request<SuccessResponse>('PUT', `/api/v1/schedule/${id}`, schedule),
+  deleteSchedule: (id: string) => 
+    request<SuccessResponse>('DELETE', `/api/v1/schedule/${id}`),
+  activateSchedule: (id: string) => 
+    request<SuccessResponse>('PUT', `/api/v1/schedule/${id}/activate`),
+  getTodaySchedule: () => 
+    request<ActiveScheduleResponse>('GET', '/api/v1/schedule/active/today'),
+  getRolloverTasks: (day?: string) => 
+    request<RolloverResponse>('GET', `/api/v1/schedule/active/rollover${day ? `?day=${day}` : ''}`),
+  applySchedule: () => 
+    request<SuccessResponse>('POST', '/api/v1/schedule/apply'),
 }

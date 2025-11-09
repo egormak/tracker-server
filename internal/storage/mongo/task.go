@@ -118,6 +118,31 @@ func (s *Storage) GetTodayTaskDuration(taskName string) (int, error) {
 
 }
 
+// GetTaskDurationForDate gets the total duration for a task on a specific date
+func (s *Storage) GetTaskDurationForDate(taskName string, date string) (int, error) {
+	var timeDuration int
+
+	database := s.Client.Database(dbName)
+	coll := database.Collection(tasksList)
+
+	// Get Information about tasks for the specific date
+	cursor_task, err := coll.Find(s.Context, bson.M{"name": taskName, "date": date})
+	if err != nil {
+		return 0, fmt.Errorf("get-task-duration-for-date: %w", err)
+	}
+	defer cursor_task.Close(s.Context)
+
+	for cursor_task.Next(s.Context) {
+		var result storage.TaskRecord
+		err := cursor_task.Decode(&result)
+		if err != nil {
+			return 0, fmt.Errorf("get-task-duration-for-date: %w", err)
+		}
+		timeDuration += result.TimeDuration
+	}
+	return timeDuration, nil
+}
+
 func (s *Storage) SetTaskParams(params entity.TaskParams) error {
 
 	var result entity.TaskDefinition
@@ -282,15 +307,35 @@ func (s *Storage) CreateTask(taskDefinition entity.TaskDefinition) error {
 	// Check if task already exists
 	coll := s.Client.Database(dbName).Collection(taskNamesList)
 	filter := bson.M{"name": taskDefinition.Name}
-	count, err := coll.CountDocuments(s.Context, filter)
-	if err != nil {
-		return fmt.Errorf("failed to check if task exists: %w", err)
-	}
-	if count > 0 {
-		return fmt.Errorf("task with name '%s' already exists", taskDefinition.Name)
+
+	// Check if task exists
+	var existingTask entity.TaskDefinition
+	err := coll.FindOne(s.Context, filter).Decode(&existingTask)
+
+	if err == nil {
+		// Task exists - update it with new values (allows updating params during the day)
+		todayDate := time.Now().Format("2 January 2006")
+		taskDefinition.Date = todayDate
+		update := bson.M{
+			"$set": bson.M{
+				"role":         taskDefinition.Role,
+				"timeschedule": taskDefinition.TimeSchedule,
+				"priority":     taskDefinition.Priority,
+				"date":         taskDefinition.Date,
+			},
+		}
+		_, err = coll.UpdateOne(s.Context, filter, update)
+		if err != nil {
+			return fmt.Errorf("failed to update existing task: %w", err)
+		}
+		return nil
 	}
 
-	// Prepare task record
+	if err != mongo.ErrNoDocuments {
+		return fmt.Errorf("failed to check if task exists: %w", err)
+	}
+
+	// Task doesn't exist - create new one
 	taskDefinition.Date = time.Now().Format("2 January 2006")
 
 	// Insert into database
