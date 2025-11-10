@@ -2,6 +2,8 @@ package handler
 
 import (
 	"log/slog"
+	"strings"
+	"time"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/services"
 
@@ -195,9 +197,16 @@ func (h *ScheduleHandler) GetTodaySchedule(c *fiber.Ctx) error {
 // GetRolloverTasks handles GET /api/v1/schedule/active/rollover
 func (h *ScheduleHandler) GetRolloverTasks(c *fiber.Ctx) error {
 	// Get current day from query param or use today
-	day := c.Query("day", "")
+	day := strings.ToLower(c.Query("day", ""))
 	if day == "" {
-		day = c.Locals("today").(string) // Assuming middleware sets this
+		if val := c.Locals("today"); val != nil {
+			if localDay, ok := val.(string); ok {
+				day = strings.ToLower(localDay)
+			}
+		}
+	}
+	if day == "" {
+		day = strings.ToLower(time.Now().Weekday().String())
 	}
 
 	rollovers, err := h.service.GetRolloverTasks(day)

@@ -91,10 +91,10 @@ func (s *TaskRecordService) GetTaskPlanPercentWithSchedule(scheduleService Sched
 	activeSchedule, err := scheduleService.GetTodaySchedule()
 	if err == nil && activeSchedule != nil {
 		// We have an active schedule - use schedule-based task selection
+		groupOrder := normalizePlanGroup(activeSchedule.PlanGroup)
 
-		// 1. Check rollover tasks first (incomplete from previous days)
+		// 1. Check rollover tasks first (incomplete from previous days) respecting plan group order
 		if len(activeSchedule.RolloverTasks) > 0 {
-			// Sort rollover tasks by source_day ordinal (oldest first), then by priority (highest first)
 			sortedRollovers := make([]entity.RolloverTask, len(activeSchedule.RolloverTasks))
 			copy(sortedRollovers, activeSchedule.RolloverTasks)
 
@@ -108,14 +108,21 @@ func (s *TaskRecordService) GetTaskPlanPercentWithSchedule(scheduleService Sched
 				return sortedRollovers[i].Priority > sortedRollovers[j].Priority // Higher priority first
 			})
 
-			// Find first rollover task with time left
-			for _, rollover := range sortedRollovers {
-				if rollover.RemainingTime > 0 {
+			for _, group := range groupOrder {
+				for _, rollover := range sortedRollovers {
+					if !matchesPlanGroup(rollover.Role, group) {
+						continue
+					}
+					if rollover.RemainingTime <= 0 {
+						continue
+					}
+
 					slog.Info("Selected rollover task",
 						"task", rollover.TaskName,
 						"source_day", rollover.SourceDay,
 						"priority", rollover.Priority,
-						"remaining", rollover.RemainingTime)
+						"remaining", rollover.RemainingTime,
+						"group", group)
 
 					return entity.PlanPercentResponse{
 						TaskName: rollover.TaskName,
@@ -128,7 +135,6 @@ func (s *TaskRecordService) GetTaskPlanPercentWithSchedule(scheduleService Sched
 
 		// 2. No rollovers or all complete - use today's scheduled tasks
 		if len(activeSchedule.Tasks) > 0 {
-			// Sort today's tasks by priority (highest first)
 			sortedTasks := make([]entity.ScheduleTask, len(activeSchedule.Tasks))
 			copy(sortedTasks, activeSchedule.Tasks)
 
@@ -136,30 +142,48 @@ func (s *TaskRecordService) GetTaskPlanPercentWithSchedule(scheduleService Sched
 				return sortedTasks[i].Priority > sortedTasks[j].Priority
 			})
 
-			// Find first task with time left
-			for _, task := range sortedTasks {
-				timeLeft, err := s.GetTodayTaskTimeLeft(task.Name)
-				if err != nil {
-					slog.Warn("Failed to get time left for scheduled task", "task", task.Name, "error", err)
-					continue
+			timeLeftCache := make(map[string]int)
+			getTimeLeft := func(taskName string) (int, error) {
+				if cached, ok := timeLeftCache[taskName]; ok {
+					return cached, nil
 				}
+				timeLeft, err := s.GetTodayTaskTimeLeft(taskName)
+				if err != nil {
+					return 0, err
+				}
+				timeLeftCache[taskName] = timeLeft
+				return timeLeft, nil
+			}
 
-				if timeLeft > 0 {
-					percent := 100
-					if len(task.Percents) > 0 {
-						percent = task.Percents[0]
+			for _, group := range groupOrder {
+				for _, task := range sortedTasks {
+					if !matchesPlanGroup(task.Role, group) {
+						continue
+					}
+					timeLeft, err := getTimeLeft(task.Name)
+					if err != nil {
+						slog.Warn("Failed to get time left for scheduled task", "task", task.Name, "error", err)
+						continue
 					}
 
-					slog.Info("Selected scheduled task",
-						"task", task.Name,
-						"priority", task.Priority,
-						"time_left", timeLeft)
+					if timeLeft > 0 {
+						percent := 100
+						if len(task.Percents) > 0 {
+							percent = task.Percents[0]
+						}
 
-					return entity.PlanPercentResponse{
-						TaskName: task.Name,
-						Percent:  percent,
-						TimeLeft: timeLeft,
-					}, nil
+						slog.Info("Selected scheduled task",
+							"task", task.Name,
+							"priority", task.Priority,
+							"time_left", timeLeft,
+							"group", group)
+
+						return entity.PlanPercentResponse{
+							TaskName: task.Name,
+							Percent:  percent,
+							TimeLeft: timeLeft,
+						}, nil
+					}
 				}
 			}
 		}
@@ -175,4 +199,33 @@ func (s *TaskRecordService) GetTaskPlanPercentWithSchedule(scheduleService Sched
 
 	// Fallback to original plan percent logic
 	return s.GetTaskPlanPercent()
+}
+
+func normalizePlanGroup(groups []string) []string {
+	if len(groups) == 0 {
+		return []string{"plan", "work", "learn", "rest"}
+	}
+
+	normalized := make([]string, 0, len(groups))
+	for _, group := range groups {
+		g := strings.TrimSpace(strings.ToLower(group))
+		if g == "" {
+			continue
+		}
+		normalized = append(normalized, g)
+	}
+
+	if len(normalized) == 0 {
+		return []string{"plan", "work", "learn", "rest"}
+	}
+
+	return normalized
+}
+
+func matchesPlanGroup(role string, group string) bool {
+	if group == "" || group == "plan" {
+		return true
+	}
+
+	return strings.ToLower(role) == group
 }

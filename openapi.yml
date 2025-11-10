@@ -27,8 +27,26 @@ tags:
     description: System management operations
   - name: Schedule
     description: Weekly schedule management with automatic rollover logic
+  - name: General
+    description: General API endpoints
 
 paths:
+  /:
+    get:
+      tags:
+        - General
+      summary: Welcome endpoint
+      description: Returns a welcome message
+      operationId: welcome
+      responses:
+        '200':
+          description: Welcome message
+          content:
+            text/html:
+              schema:
+                type: string
+                example: "Welcome to Tracker Server API"
+
   /api/v1/stats/done/today:
     get:
       tags:
@@ -162,6 +180,93 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/task/plan/percent/schedule:
+    get:
+      tags:
+        - Task
+      summary: Get task plan percent with schedule awareness
+      description: Get the next task based on plan percentage, considering weekly schedule and rollover tasks
+      operationId: getTaskPlanPercentWithSchedule
+      responses:
+        '200':
+          description: Task plan percentage retrieved successfully with schedule context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanPercentResponse"
+        '404':
+          description: No tasks available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/record/params:
+    get:
+      deprecated: true
+      tags:
+        - Task
+      summary: Get task parameters (legacy)
+      description: Legacy endpoint - use /api/v1/task/params instead
+      operationId: getTaskParamsLegacy
+      parameters:
+        - name: task_name
+          in: query
+          description: Name of the task
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task parameters retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskParams"
+        '404':
+          description: Task not found or parameters are old
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      deprecated: true
+      tags:
+        - Task
+      summary: Set task params (legacy)
+      operationId: setTaskParamsLegacy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetTaskParamsRequest"
+      responses:
+        '200':
+          description: Parameters set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
         '500':
           description: Internal server error
           content:
@@ -976,33 +1081,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/record/params:
-    post:
-      deprecated: true
-      tags:
-        - Task
-      summary: Set task params (legacy)
-      operationId: setTaskParamsLegacy
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SetTaskParamsRequest"
-      responses:
-        '200':
-          description: Parameters set
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /api/v1/roles/records/today:
     get:
       tags:
@@ -1186,6 +1264,25 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/manage/procents:
+    get:
+      tags:
+        - Management
+      summary: Get plan percents configuration (legacy)
+      description: Legacy endpoint - returns same data as /api/v1/manage/plan-percents
+      operationId: getProcentsLegacy
+      responses:
+        '200':
+          description: Plan percents retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanPercentsResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       tags:
         - Management

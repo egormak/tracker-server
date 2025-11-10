@@ -68,15 +68,25 @@ func (s *Storage) GetSchedule(id string) (entity.WeeklySchedule, error) {
 func (s *Storage) GetActiveSchedule() (entity.WeeklySchedule, error) {
 	coll := s.Client.Database(dbName).Collection(weeklySchedulesCollection)
 
-	var schedule entity.WeeklySchedule
-	err := coll.FindOne(s.Context, bson.M{"is_active": true}).Decode(&schedule)
-	if err != nil {
+	result := coll.FindOne(s.Context, bson.M{"is_active": true})
+	if err := result.Err(); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return entity.WeeklySchedule{}, fmt.Errorf("no active schedule found")
 		}
 		return entity.WeeklySchedule{}, fmt.Errorf("failed to get active schedule: %w", err)
 	}
 
+	var doc struct {
+		entity.WeeklySchedule `bson:",inline"`
+		ObjectID              primitive.ObjectID `bson:"_id"`
+	}
+
+	if err := result.Decode(&doc); err != nil {
+		return entity.WeeklySchedule{}, fmt.Errorf("failed to decode active schedule: %w", err)
+	}
+
+	schedule := doc.WeeklySchedule
+	schedule.ID = doc.ObjectID.Hex()
 	return schedule, nil
 }
 

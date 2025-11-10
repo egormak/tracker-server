@@ -193,18 +193,24 @@ func (s *ScheduleService) GetRolloverTasks(currentDay string) ([]entity.Rollover
 		return nil, fmt.Errorf("no active schedule: %w", err)
 	}
 
-	currentDayOrdinal := dayOrder[strings.ToLower(currentDay)]
-	previousDays := s.getPreviousDays(currentDay)
+	normalizedDay := strings.ToLower(currentDay)
+	currentDayOrdinal, ok := dayOrder[normalizedDay]
+	if !ok {
+		normalizedDay = strings.ToLower(time.Now().Weekday().String())
+		currentDayOrdinal = dayOrder[normalizedDay]
+	}
+	previousDays := s.getPreviousDays(normalizedDay)
+	referenceDate := s.resolveReferenceDate(normalizedDay, currentDayOrdinal)
 
 	// Build task aggregates from all previous days
-	taskMap := s.buildTaskAggregates(schedule, previousDays, currentDayOrdinal)
+	taskMap := s.buildTaskAggregates(schedule, previousDays, referenceDate)
 
 	// Convert aggregates to rollover list
 	return s.buildRolloverList(taskMap), nil
 }
 
 // buildTaskAggregates processes all previous days and builds task aggregation map
-func (s *ScheduleService) buildTaskAggregates(schedule entity.WeeklySchedule, previousDays []string, currentDayOrdinal int) map[string]*taskAggregate {
+func (s *ScheduleService) buildTaskAggregates(schedule entity.WeeklySchedule, previousDays []string, referenceDate time.Time) map[string]*taskAggregate {
 	taskMap := make(map[string]*taskAggregate)
 
 	// First pass: collect scheduled tasks from all days to initialize taskMap
@@ -237,7 +243,7 @@ func (s *ScheduleService) buildTaskAggregates(schedule entity.WeeklySchedule, pr
 	// Second pass: check actual completed work for ALL tasks on ALL previous days
 	// This handles both scheduled and unscheduled days uniformly
 	for _, day := range previousDays {
-		dayDate := s.getDateForDay(day, currentDayOrdinal)
+		dayDate := s.getDateForDay(day, referenceDate)
 
 		for taskName, agg := range taskMap {
 			timeDone, err := s.st.GetTaskDurationForDate(taskName, dayDate)
@@ -471,17 +477,26 @@ func (s *ScheduleService) getDayScheduleFromWeekly(schedule entity.WeeklySchedul
 }
 
 // Helper: getDateForDay calculates the date for a given day in the current week
-func (s *ScheduleService) getDateForDay(day string, currentDayOrdinal int) string {
+func (s *ScheduleService) getDateForDay(day string, referenceDate time.Time) string {
 	dayOrdinal := dayOrder[strings.ToLower(day)]
-	daysAgo := currentDayOrdinal - dayOrdinal
+	referenceOrdinal := dayOrder[strings.ToLower(referenceDate.Weekday().String())]
+	daysAgo := referenceOrdinal - dayOrdinal
 
 	// Handle negative case (shouldn't happen if previousDays is filtered correctly)
 	if daysAgo < 0 {
 		daysAgo += 7 // Wrap around to previous week
 	}
 
-	date := time.Now().AddDate(0, 0, -daysAgo)
+	date := referenceDate.AddDate(0, 0, -daysAgo)
 	return date.Format("2 January 2006")
+}
+
+// resolveReferenceDate returns a time aligned to the requested current day within the current week
+func (s *ScheduleService) resolveReferenceDate(currentDay string, currentDayOrdinal int) time.Time {
+	now := time.Now()
+	todayOrdinal := dayOrder[strings.ToLower(now.Weekday().String())]
+	delta := currentDayOrdinal - todayOrdinal
+	return now.AddDate(0, 0, delta)
 }
 
 // GetRolloverTasksForGroup returns rollover tasks filtered by role/group
