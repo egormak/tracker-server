@@ -141,3 +141,38 @@ func (m *Manage) TimerGet(c *fiber.Ctx) error {
 		"time_duration": result,
 	})
 }
+
+// TimerDel deletes the timer value based on the count provided in the request body.
+func (m *Manage) TimerDel(c *fiber.Ctx) error {
+	// Define a struct to hold the request body
+	var body struct {
+		Count int `json:"count"`
+	}
+
+	// Parse the request body and store it in the 'body' variable
+	if err := c.BodyParser(&body); err != nil {
+		log.Errorf("Error parsing request body: %v", err)
+		return err
+	}
+
+	// Log the start of the timer delete process
+	log.Infof("Start Timer Del")
+
+	// Delete the timer value in the database based on the count
+	m.st.TimeListDelDB(body.Count)
+
+	// Log the completion of the timer delete process
+	log.Info("Finish Timer Del")
+
+	// Create a response map with the status and message
+	response := fiber.Map{
+		"status":  "accept",
+		"message": "Timer was Del",
+	}
+
+	// Log the response being returned
+	log.Infof("Returning response: %v", response)
+
+	// Return the response as a JSON with status 200
+	return c.Status(200).JSON(&response)
+}

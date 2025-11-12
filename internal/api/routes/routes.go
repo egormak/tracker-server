@@ -3,7 +3,6 @@ package routes
 import (
 	"tracker-server/internal/api/handler"
 	"tracker-server/internal/handler/manage"
-	"tracker-server/internal/handler/record"
 	"tracker-server/internal/handler/role"
 	"tracker-server/internal/handler/welcome"
 	"tracker-server/internal/notify"
@@ -24,10 +23,10 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	scheduleService := services.NewScheduleService(mongoconn)
 
 	// Handlers
-	// Task
-	taskHandler := handler.NewTaskHandler(taskService)
-	// TaskRecords
-	taskRecordHandler := handler.NewTaskRecordHandlerWithSchedule(taskRecordService, scheduleService)
+	// Task (with storage access for legacy endpoints)
+	taskHandler := handler.NewTaskHandlerWithStorage(taskService, mongoconn)
+	// TaskRecords (with storage access for legacy plan percent rotation)
+	taskRecordHandler := handler.NewTaskRecordHandlerWithStorage(taskRecordService, scheduleService, mongoconn)
 	// Rest
 	restHandler := handler.NewRestHandler(restService)
 	// Statistics
@@ -37,8 +36,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Schedule
 	scheduleHandler := handler.NewScheduleHandler(scheduleService)
 
-	// OLD Logic
-	recordHandler := record.New(mongoconn, notify)
+	// OLD Logic (manage and role handlers still needed for legacy routes)
 	roleHandler := role.New(mongoconn, notify)
 	manageHandlerOld := manage.New(mongoconn, notify)
 	//
@@ -46,14 +44,18 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Routes
 	api := app.Group("/api")
 	// Task
-	api.Get("/v1/task/params", taskHandler.TaskParams)        // TODO
-	api.Get("/v1/record/params", recordHandler.GetTaskParams) // Remove in future Task Params
+	api.Get("/v1/task/params", taskHandler.TaskParams)
+	api.Get("/v1/record/params", taskHandler.TaskParams)         // Legacy endpoint - same handler
+	api.Get("/v1/record/task-day", taskHandler.GetDayTaskRecord) // Legacy endpoint for CLI
 	// api.Post("/v1/task/create", taskHandler.CreateTask)
 	// TaskRecords
 	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
+	api.Post("/v1/record", taskRecordHandler.AddRecord) // Legacy endpoint - same handler
 	// api.Get("/v1/task/next", taskRecordHandler.TasksNext)
 	api.Get("/v1/task/plan/percent", taskRecordHandler.GetTaskPlanPercent)
+	api.Get("/v1/task/plan-percent", taskRecordHandler.GetTaskPlanPercent) // Legacy alias (hyphen instead of slash)
 	api.Get("/v1/task/plan/percent/schedule", taskRecordHandler.GetTaskPlanPercentWithSchedule)
+	api.Get("/v1/task/plan-percent/change", taskRecordHandler.ChangeGroupPlanPercent) // Legacy rotation
 	// Rest
 	api.Post("/v1/rest/add", restHandler.RestAdd)
 	api.Post("/v1/rest-spend", restHandler.RestSpend) // Remove in future
@@ -71,6 +73,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone) // TODO Remove in future
 	// Alias for dashboard tasks list (today planned vs done)
 	api.Get("/v1/stats/tasks/today", statsHandler.StatCompletionTimeDone)
+	api.Get("/v1/tasklist", statsHandler.ShowTaskList) // Legacy endpoint for CLI and web UI
 
 	// Plan Percents
 	api.Get("/v1/manage/plan-percents", manageHandler.GetPlanPercents)                    // New route for plan percents
@@ -80,20 +83,11 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	api.Post("/v1/timer/set", manageHandlerOld.TimerSet)
 	api.Get("/v1/timer/get", manageHandlerOld.TimerGet)
-	api.Post("/v1/timer/del", recordHandler.TimerDel)
+	api.Post("/v1/timer/del", manageHandlerOld.TimerDel)
 
-	// Records
-	api.Post("/v1/record", recordHandler.AddRecord)
-	api.Get("/v1/record/task-day", recordHandler.GetDayTaskRecord)
-	api.Post("/v1/record/params", recordHandler.SetTaskParams)
-
-	api.Get("/v1/records", recordHandler.ShowRecords)
-	api.Get("/v1/records/clean", recordHandler.CleanRecords)
-	api.Get("/v1/tasklist", recordHandler.ShowTaskList)
-	api.Get("/v1/task/plan-percent", recordHandler.GetTaskPlanPercent)
-	api.Get("/v1/task/percent", recordHandler.GetTaskDayByPercent)
-	// api.Post("/v1/task/schedule", recordHandler.SetTaskSchedule)
-	api.Get("/v1/task/plan-percent/change", recordHandler.ChangeGroupPlanPercent)
+	// Legacy record routes for web UI and CLI
+	api.Get("/v1/records", taskRecordHandler.ShowRecords)
+	api.Get("/v1/records/clean", taskRecordHandler.CleanRecords)
 
 	// Roles
 	api.Get("/v1/roles/records", roleHandler.ShowRolesRecords)

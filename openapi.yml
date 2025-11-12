@@ -1012,32 +1012,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/record:
-    post:
-      deprecated: true
-      tags:
-        - TaskRecord
-      summary: Add a task record (legacy)
-      operationId: addRecordLegacy
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TaskRecordRequest"
-      responses:
-        '200':
-          description: Record added successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+  # REMOVED: /api/v1/record POST - Use /api/v1/taskrecord instead
+  # The legacy endpoint has been removed. Use /api/v1/taskrecord for adding task records.
 
   /api/v1/records:
     get:
@@ -1611,12 +1587,18 @@ components:
         time_done:
           type: integer
           description: Time spent on the task in minutes
+        source_day:
+          type: string
+          description: Optional day of the week this work should be recorded against (e.g., "monday", "tuesday"). If omitted, records against today. Used for completing rollover tasks from previous days.
+          enum: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+          example: "monday"
       required:
         - task_name
         - time_done
       example:
         task_name: "Programming"
         time_done: 45
+        source_day: "monday"
 
     PlanPercentResponse:
       type: object
@@ -1630,6 +1612,10 @@ components:
         time_left:
           type: integer
           description: Time left for the task in minutes
+        source_day:
+          type: string
+          description: Optional day of the week this task is from. Present for rollover tasks from previous days (e.g., "monday"). Empty or omitted for today's tasks.
+          example: "monday"
       required:
         - task_name
         - percent

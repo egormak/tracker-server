@@ -214,6 +214,10 @@ func (s *Storage) TimerGlobalGet() (int, error) {
 
 	err := coll.FindOne(s.Context, bson.D{{"name", "Scheduler"}}).Decode(&result)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// No global timer configured yet; treat as zero instead of 500-ing
+			return 0, nil
+		}
 		return 0, err
 	}
 	return result.ScheduleAll, nil

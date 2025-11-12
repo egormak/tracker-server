@@ -12,12 +12,22 @@ type taskService interface {
 	// AddRecord(body entity.TaskRecordRequest) error
 }
 
+type taskStorage interface {
+	GetDayTaskRecord(taskName string) (int, error)
+}
+
 type TaskHandler struct {
 	srv taskService
+	st  taskStorage
 }
 
 func NewTaskHandler(srv taskService) *TaskHandler {
-	return &TaskHandler{srv: srv}
+	return &TaskHandler{srv: srv, st: nil}
+}
+
+// NewTaskHandlerWithStorage creates handler with direct storage access for legacy endpoints
+func NewTaskHandlerWithStorage(srv taskService, st taskStorage) *TaskHandler {
+	return &TaskHandler{srv: srv, st: st}
 }
 
 func (t *TaskHandler) TaskParams(c *fiber.Ctx) error {
@@ -44,6 +54,31 @@ func (t *TaskHandler) TaskParams(c *fiber.Ctx) error {
 	}
 
 	return c.Status(200).JSON(result)
+}
+
+// GetDayTaskRecord returns the total time spent on a task today (legacy endpoint for CLI)
+func (t *TaskHandler) GetDayTaskRecord(c *fiber.Ctx) error {
+	taskName := c.Query("task_name")
+
+	if t.st == nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": "Internal configuration error",
+		})
+	}
+
+	result, err := t.st.GetDayTaskRecord(taskName)
+	if err != nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(200).JSON(&fiber.Map{
+		"status":        "Done",
+		"task_duration": result,
+	})
 }
 
 // func (t *TaskRecordHandler) AddRecord(c *fiber.Ctx) error {

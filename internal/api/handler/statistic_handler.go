@@ -36,3 +36,19 @@ func (s *StatisticHandler) StatCompletionTimeDone(c *fiber.Ctx) error {
 	return c.Status(200).JSON(statsData)
 
 }
+
+// ShowTaskList returns today's tasks with scheduled time and actual time done (legacy endpoint)
+func (s *StatisticHandler) ShowTaskList(c *fiber.Ctx) error {
+	slog.Info("Get request ShowTaskList")
+
+	taskList, err := s.srv.GetTaskRecordToday()
+	if err != nil {
+		slog.Error("Failed to get task list", "err", err)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(200).JSON(taskList)
+}

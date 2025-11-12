@@ -125,9 +125,10 @@ func (s *TaskRecordService) GetTaskPlanPercentWithSchedule(scheduleService Sched
 						"group", group)
 
 					return entity.PlanPercentResponse{
-						TaskName: rollover.TaskName,
-						Percent:  rollover.Percent,
-						TimeLeft: rollover.RemainingTime,
+						TaskName:  rollover.TaskName,
+						Percent:   rollover.Percent,
+						TimeLeft:  rollover.RemainingTime,
+						SourceDay: rollover.SourceDay, // Include source day for rollover tasks
 					}, nil
 				}
 			}
@@ -179,9 +180,10 @@ func (s *TaskRecordService) GetTaskPlanPercentWithSchedule(scheduleService Sched
 							"group", group)
 
 						return entity.PlanPercentResponse{
-							TaskName: task.Name,
-							Percent:  percent,
-							TimeLeft: timeLeft,
+							TaskName:  task.Name,
+							Percent:   percent,
+							TimeLeft:  timeLeft,
+							SourceDay: "", // Empty for today's tasks (not a rollover)
 						}, nil
 					}
 				}

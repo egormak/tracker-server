@@ -209,58 +209,92 @@ func (s *ScheduleService) GetRolloverTasks(currentDay string) ([]entity.Rollover
 	return s.buildRolloverList(taskMap), nil
 }
 
-// buildTaskAggregates processes all previous days and builds task aggregation map
+// buildTaskAggregates processes each previous day separately and tracks deficits per day
 func (s *ScheduleService) buildTaskAggregates(schedule entity.WeeklySchedule, previousDays []string, referenceDate time.Time) map[string]*taskAggregate {
-	taskMap := make(map[string]*taskAggregate)
+	// Track deficits per day per task: map[taskName]map[day]deficit
+	taskDayDeficits := make(map[string]map[string]int)
+	taskInfo := make(map[string]*taskAggregate)
 
-	// First pass: collect scheduled tasks from all days to initialize taskMap
+	// Process each day separately
 	for _, day := range previousDays {
 		daySchedule := s.getDayScheduleFromWeekly(schedule, day)
+		dayDate := s.getDateForDay(day, referenceDate)
 
+		// For each task scheduled on this day
 		for _, task := range daySchedule.Tasks {
-			if agg, exists := taskMap[task.Name]; exists {
-				// Task seen before, add scheduled time
-				agg.totalScheduled += task.Time
-			} else {
-				// First time seeing this task
-				percent := 100
-				if len(task.Percents) > 0 {
-					percent = task.Percents[0]
-				}
+			// Get actual work done on this specific day
+			timeDone, err := s.st.GetTaskDurationForDate(task.Name, dayDate)
+			if err != nil {
+				timeDone = 0
+			}
 
-				taskMap[task.Name] = &taskAggregate{
-					totalScheduled: task.Time,
-					totalDone:      0, // Will be calculated in second pass
-					role:           task.Role,
-					priority:       task.Priority,
-					percent:        percent,
-					oldestDay:      day,
+			// Calculate deficit for this specific day
+			dayDeficit := task.Time - timeDone
+
+			slog.Info("Day task analysis",
+				"task", task.Name,
+				"day", day,
+				"date", dayDate,
+				"scheduled", task.Time,
+				"done", timeDone,
+				"deficit", dayDeficit)
+
+			if dayDeficit > 0 {
+				// This day has incomplete work
+				if taskDayDeficits[task.Name] == nil {
+					taskDayDeficits[task.Name] = make(map[string]int)
+				}
+				taskDayDeficits[task.Name][day] = dayDeficit
+
+				// Store task info (use first occurrence for metadata)
+				if taskInfo[task.Name] == nil {
+					percent := 100
+					if len(task.Percents) > 0 {
+						percent = task.Percents[0]
+					}
+
+					taskInfo[task.Name] = &taskAggregate{
+						role:     task.Role,
+						priority: task.Priority,
+						percent:  percent,
+					}
 				}
 			}
 		}
 	}
 
-	// Second pass: check actual completed work for ALL tasks on ALL previous days
-	// This handles both scheduled and unscheduled days uniformly
-	for _, day := range previousDays {
-		dayDate := s.getDateForDay(day, referenceDate)
+	// Now aggregate deficits, tracking the most recent incomplete day
+	taskMap := make(map[string]*taskAggregate)
+	for taskName, dayDeficits := range taskDayDeficits {
+		totalDeficit := 0
+		var mostRecentDay string
+		mostRecentOrdinal := -1
 
-		for taskName, agg := range taskMap {
-			timeDone, err := s.st.GetTaskDurationForDate(taskName, dayDate)
-			if err != nil {
-				// Not an error - task might not have been worked on this day
-				continue
+		// Find the most recent day with deficit
+		for day, deficit := range dayDeficits {
+			totalDeficit += deficit
+			dayOrdinal := dayOrder[day]
+			if dayOrdinal > mostRecentOrdinal {
+				mostRecentOrdinal = dayOrdinal
+				mostRecentDay = day
+			}
+		}
+
+		if totalDeficit > 0 && taskInfo[taskName] != nil {
+			taskMap[taskName] = &taskAggregate{
+				totalScheduled: totalDeficit, // Not used anymore, but kept for compatibility
+				totalDone:      0,            // Not used anymore
+				role:           taskInfo[taskName].role,
+				priority:       taskInfo[taskName].priority,
+				percent:        taskInfo[taskName].percent,
+				oldestDay:      mostRecentDay, // Now points to most recent incomplete day
 			}
 
-			if timeDone > 0 {
-				agg.totalDone += timeDone
-				slog.Info("Task work found",
-					"task", taskName,
-					"day", day,
-					"date", dayDate,
-					"done", timeDone,
-					"running_total_done", agg.totalDone)
-			}
+			slog.Info("Task aggregate calculated",
+				"task", taskName,
+				"total_deficit", totalDeficit,
+				"most_recent_incomplete_day", mostRecentDay,
+				"days_with_deficits", len(dayDeficits))
 		}
 	}
 
@@ -272,22 +306,22 @@ func (s *ScheduleService) buildRolloverList(taskMap map[string]*taskAggregate) [
 	var rollovers []entity.RolloverTask
 
 	for taskName, agg := range taskMap {
-		deficit := agg.totalScheduled - agg.totalDone
+		// totalScheduled now contains the total deficit amount
+		deficit := agg.totalScheduled
 		if deficit > 0 {
 			rollovers = append(rollovers, entity.RolloverTask{
 				TaskName:      taskName,
 				Role:          agg.role,
 				Priority:      agg.priority,
 				RemainingTime: deficit,
-				SourceDay:     agg.oldestDay,
+				SourceDay:     agg.oldestDay, // Now points to most recent incomplete day
 				Percent:       agg.percent,
 			})
 
-			slog.Info("Task deficit calculated",
+			slog.Info("Rollover task created",
 				"task", taskName,
-				"total_scheduled", agg.totalScheduled,
-				"total_done", agg.totalDone,
-				"deficit", deficit)
+				"deficit", deficit,
+				"source_day", agg.oldestDay)
 		}
 	}
 

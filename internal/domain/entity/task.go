@@ -8,8 +8,9 @@ type TaskRecord struct {
 }
 
 type TaskRecordRequest struct {
-	TaskName string `json:"task_name"`
-	TimeDone int    `json:"time_done"`
+	TaskName  string `json:"task_name"`
+	TimeDone  int    `json:"time_done"`
+	SourceDay string `json:"source_day,omitempty"` // Optional: "monday", "tuesday", etc. If empty, uses today
 }
 
 type TaskResult struct {
@@ -36,7 +37,8 @@ type TaskParams struct {
 
 // WebResponse is a struct for response
 type PlanPercentResponse struct {
-	TaskName string `json:"task_name"`
-	Percent  int    `json:"percent"`
-	TimeLeft int    `json:"time_left"`
+	TaskName  string `json:"task_name"`
+	Percent   int    `json:"percent"`
+	TimeLeft  int    `json:"time_left"`
+	SourceDay string `json:"source_day,omitempty"` // Optional: which day this task is from (for rollover tasks)
 }

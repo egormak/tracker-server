@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"log/slog"
+	"time"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/services"
 	"tracker-server/internal/storage"
@@ -21,33 +22,58 @@ type taskRecordService interface {
 	GetTaskPlanPercentWithSchedule(scheduleService services.ScheduleServiceProvider) (entity.PlanPercentResponse, error)
 }
 
+type planPercentStorage interface {
+	GetGroupPlanPercent() (int, error)
+	ChangeGroupPlanPercent(groupPlan int) error
+	GetRecords() ([]storage.TaskRecord, error)
+	CleanRecords()
+}
+
 type TaskRecordHandler struct {
 	srv             taskRecordService
 	scheduleService scheduleService
+	st              planPercentStorage
 }
 
 func NewTaskRecordHandler(srv taskRecordService) *TaskRecordHandler {
-	return &TaskRecordHandler{srv: srv, scheduleService: nil}
+	return &TaskRecordHandler{srv: srv, scheduleService: nil, st: nil}
 }
 
 // NewTaskRecordHandlerWithSchedule creates handler with schedule integration
 func NewTaskRecordHandlerWithSchedule(srv taskRecordService, scheduleSrv scheduleService) *TaskRecordHandler {
-	return &TaskRecordHandler{srv: srv, scheduleService: scheduleSrv}
+	return &TaskRecordHandler{srv: srv, scheduleService: scheduleSrv, st: nil}
+}
+
+// NewTaskRecordHandlerWithStorage creates handler with direct storage access for legacy endpoints
+func NewTaskRecordHandlerWithStorage(srv taskRecordService, scheduleSrv scheduleService, st planPercentStorage) *TaskRecordHandler {
+	return &TaskRecordHandler{srv: srv, scheduleService: scheduleSrv, st: st}
 }
 
 func (t *TaskRecordHandler) AddRecord(c *fiber.Ctx) error {
-	slog.Info("Get request addRecord")
+	slog.Info("=== RECEIVED AddRecord Request ===")
+
+	// Log raw body for debugging
+	rawBody := string(c.Body())
+	slog.Info("Raw request body", "body", rawBody)
 
 	var body entity.TaskRecordRequest
 
 	if err := c.BodyParser(&body); err != nil {
 		errMsg := fmt.Errorf("can't parse body: %s", err)
-		slog.Error("Can't parse body", "err", err)
+		slog.Error("Can't parse body", "err", err, "raw_body", rawBody)
 		return c.Status(500).JSON(&fiber.Map{
 			"status":  "error",
 			"message": errMsg.Error(),
 		})
 	}
+
+	// Log parsed request details
+	slog.Info("Parsed request body",
+		"task_name", body.TaskName,
+		"time_done", body.TimeDone,
+		"source_day", body.SourceDay,
+		"source_day_empty", body.SourceDay == "",
+		"source_day_length", len(body.SourceDay))
 
 	if body.TaskName == "" {
 		errMsg := "Task name is not Set"
@@ -128,4 +154,105 @@ func (t *TaskRecordHandler) GetTaskPlanPercentWithSchedule(c *fiber.Ctx) error {
 
 	slog.Info("Sent answer", "request", "GetTaskPlanPercentWithSchedule", "answer", answer)
 	return c.Status(200).JSON(answer)
+}
+
+// ChangeGroupPlanPercent rotates to the next plan percent group (legacy endpoint for CLI)
+func (t *TaskRecordHandler) ChangeGroupPlanPercent(c *fiber.Ctx) error {
+	slog.Info("Get request ChangeGroupPlanPercent")
+
+	if t.st == nil {
+		slog.Error("Storage not initialized for ChangeGroupPlanPercent")
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": "Internal configuration error",
+		})
+	}
+
+	groupPlan, err := t.st.GetGroupPlanPercent()
+	if err != nil {
+		slog.Error("Failed to get group plan percent", "err", err)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	if err := t.st.ChangeGroupPlanPercent(groupPlan); err != nil {
+		slog.Error("Failed to change group plan percent", "err", err)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	slog.Info("Plan percent group rotated successfully")
+	return c.Status(200).JSON(&fiber.Map{
+		"status": "accept",
+	})
+}
+
+// ShowRecords returns a JSON response with task records for today, yesterday, and all time (legacy endpoint for web UI)
+func (t *TaskRecordHandler) ShowRecords(c *fiber.Ctx) error {
+	if t.st == nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": "Internal configuration error",
+		})
+	}
+
+	// Get today's and yesterday's dates in the required format
+	today := time.Now().Format("2 January 2006")
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2 January 2006")
+
+	// Retrieve task records from the storage
+	records, err := t.st.GetRecords()
+	if err != nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	// Initialize maps to store task records for today, yesterday, and all time
+	taskRecordsToday := make(map[string]int)
+	taskRecordsYesterday := make(map[string]int)
+	taskRecordsAll := make(map[string]int)
+
+	// Iterate over the records and update the corresponding maps based on the date
+	for _, v := range records {
+		if v.Date == today {
+			taskRecordsToday[v.Name] += v.TimeDuration
+		} else if v.Date == yesterday {
+			taskRecordsYesterday[v.Name] += v.TimeDuration
+		}
+		taskRecordsAll[v.Name] += v.TimeDuration
+	}
+
+	// Create a response map with task records for today, yesterday, and all time
+	answer := map[string]map[string]int{
+		"today":     taskRecordsToday,
+		"yesterday": taskRecordsYesterday,
+		"all":       taskRecordsAll,
+	}
+
+	return c.JSON(answer)
+}
+
+// CleanRecords cleans all records (dev endpoint)
+func (t *TaskRecordHandler) CleanRecords(c *fiber.Ctx) error {
+	if t.st == nil {
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": "Internal configuration error",
+		})
+	}
+
+	slog.Info("Start Clean Data")
+	t.st.CleanRecords()
+	slog.Info("Finish Data Clean")
+
+	return c.Status(200).JSON(&fiber.Map{
+		"status":  "accept",
+		"message": "Data was erased",
+	})
 }

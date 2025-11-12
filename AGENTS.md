@@ -4,7 +4,7 @@
 - Entry point: `cmd/server/main.go` (Fiber HTTP server + Fiber logger + slog/tint setup).
 - Core packages under `internal/`:
   - `api/handler`, `api/routes` – **preferred** HTTP layer for new endpoints (task, rest, stats, manage, schedule).
-  - `handler/` – legacy Fiber handlers still powering `/api/v1/record`, `/api/v1/manage/procents`, `/api/v1/roles`, etc. Touch only when maintaining backwards compatibility.
+  - `handler/` – legacy Fiber handlers still powering `/api/v1/manage/procents`, `/api/v1/roles`, etc. Touch only when maintaining backwards compatibility.
   - `services/` – business logic (tasks, stats, management, plan percents, rest, schedule, task records). `service/days.go` holds shared helpers.
   - `storage/` + `storage/mongo/` – storage interfaces/adapters (tasks, records, rest, timer, schedule `weekly_schedules` collection, etc.).
   - `domain/entity/`, `models/`, `options/` – typed domain models (tasks, rest, manage, schedule requests/rollovers).
@@ -76,9 +76,10 @@
 ## API Highlights
 - See `openapi.yml` for the full spec.
 - Tasks & Records:
+  - POST `/api/v1/taskrecord` – add record `{ task_name, time_done, source_day? }` (replaces legacy `/api/v1/record`)
+  - POST `/api/v1/record` – legacy alias for `/api/v1/taskrecord` (same handler)
   - GET `/api/v1/task/plan/percent` – classic plan-based next task
   - GET `/api/v1/task/plan/percent/schedule` – schedule-aware next task
-  - POST `/api/v1/taskrecord` – add record `{ task_name, time_done }`
 - Rest & Manage:
   - GET `/api/v1/rest/get`, POST `/api/v1/rest/add`, POST `/api/v1/rest/spend`
   - POST `/api/v1/manage/task/create`
@@ -92,5 +93,5 @@
   - POST `/api/v1/schedule/apply` – create today's tasks from active schedule
   - CRUD via `/api/v1/schedule/:id`, `/api/v1/schedule/:id/activate`
 - Timer & Legacy helpers (still routed via `internal/handler/*`):
-  - Timer: GET `/api/v1/timer/get`, POST `/api/v1/timer/set`, `/api/v1/timer/del`, plus `/api/v1/manage/timer/*` legacy controls
-  - Records/roles/manage legacy routes: `/api/v1/record/*`, `/api/v1/task/plan-percent/change`, `/api/v1/manage/procents`, `/api/v1/roles/*`, `/api/v1/manage/telegram/*`
+  - Timer: GET `/api/v1/timer/get`, POST `/api/v1/timer/set`, POST `/api/v1/timer/del`
+  - Legacy management: `/api/v1/manage/timer/*`, `/api/v1/manage/procents`, `/api/v1/roles/*`, `/api/v1/manage/telegram/*`

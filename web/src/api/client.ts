@@ -31,6 +31,7 @@ export interface PlanPercentResponse {
   task_name: string
   percent: number
   time_left: number
+  source_day?: string // Optional: which day this task is from (for rollover tasks)
 }
 
 export interface PlanPercentsResponse {
@@ -52,7 +53,11 @@ export type PlanPercentGroup = 'plan' | 'work' | 'learn' | 'rest'
 export interface RestTimeResponse { rest_time: number }
 export interface SuccessResponse { status: string; message?: string }
 
-export interface TaskRecordRequest { task_name: string; time_done: number }
+export interface TaskRecordRequest { 
+  task_name: string
+  time_done: number
+  source_day?: string // Optional: day of the week to record against (e.g., "monday")
+}
 export interface RestRecordRequest { rest_time: number }
 export interface CreateTaskRequest { task_name: string; role: string }
 export interface TimerSetRequest { count: number }

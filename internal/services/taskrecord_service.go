@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 	"tracker-server/internal/domain/entity"
+	"tracker-server/internal/service"
 )
 
 type TaskRecordStorage interface {
@@ -32,6 +33,10 @@ func NewTaskRecordService(st TaskRecordStorage) *TaskRecordService {
 }
 
 func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest) error {
+	slog.Info("=== TaskRecordService.AddRecord START ===",
+		"task_name", taskRecordRequest.TaskName,
+		"time_done", taskRecordRequest.TimeDone,
+		"source_day", taskRecordRequest.SourceDay)
 
 	taskRole, err := s.st.GetRole(taskRecordRequest.TaskName)
 	if err != nil {
@@ -40,18 +45,57 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 		return errMsg
 	}
 
+	slog.Info("Retrieved task role", "task", taskRecordRequest.TaskName, "role", taskRole)
+
+	// Determine the record date
+	// If source_day is provided, calculate the date for that day in the current week
+	// Otherwise, use today's date
+	todayDate := time.Now().Format("2 January 2006")
+	recordDate := todayDate
+
+	slog.Info("Date calculation START",
+		"today", todayDate,
+		"source_day_provided", taskRecordRequest.SourceDay,
+		"source_day_empty", taskRecordRequest.SourceDay == "",
+		"current_weekday", time.Now().Weekday().String())
+
+	if taskRecordRequest.SourceDay != "" {
+		recordDate = service.CalculateDateForDay(taskRecordRequest.SourceDay)
+		slog.Info("✅ Recording task against SOURCE DAY",
+			"task", taskRecordRequest.TaskName,
+			"source_day", taskRecordRequest.SourceDay,
+			"calculated_date", recordDate,
+			"today_date", todayDate,
+			"dates_different", recordDate != todayDate)
+	} else {
+		slog.Info("⚠️  NO SOURCE DAY - Recording against TODAY",
+			"task", taskRecordRequest.TaskName,
+			"record_date", recordDate)
+	}
+
 	record := entity.TaskRecord{
 		Name:         taskRecordRequest.TaskName,
 		Role:         taskRole,
 		TimeDuration: taskRecordRequest.TimeDone,
-		Date:         time.Now().Format("2 January 2006"),
+		Date:         recordDate,
 	}
+
+	slog.Info("Creating task record",
+		"name", record.Name,
+		"role", record.Role,
+		"duration", record.TimeDuration,
+		"date", record.Date)
 
 	if err := s.st.AddTaskRecord(record); err != nil {
 		errMsg := fmt.Errorf("can't add record: %s", err)
 		slog.Error("task_record_service, add_record:add_task_record", "err", errMsg)
 		return errMsg
 	}
+
+	slog.Info("✅ Task record SAVED to database",
+		"task", record.Name,
+		"date", record.Date,
+		"duration", record.TimeDuration)
 
 	if err := s.st.AddRoleMinutes(record); err != nil {
 		errMsg := fmt.Errorf("can't add role minutes: %s", err)
