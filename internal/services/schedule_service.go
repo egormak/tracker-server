@@ -20,14 +20,12 @@ var dayOrder = map[string]int{
 	"sunday":    6,
 }
 
-// taskAggregate tracks scheduled vs completed time for a task across multiple days
-type taskAggregate struct {
-	totalScheduled int
-	totalDone      int
-	role           string
-	priority       int
-	percent        int
-	oldestDay      string
+// dayDeficitInfo tracks deficit information for a specific day
+type dayDeficitInfo struct {
+	deficit  int
+	role     string
+	priority int
+	percent  int
 }
 
 // ScheduleStorage defines the storage interface for schedule operations
@@ -46,6 +44,9 @@ type ScheduleStorage interface {
 	GetTaskDurationForDate(taskName string, date string) (int, error)
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	CreateTask(taskDefinition entity.TaskDefinition) error
+	GetTaskNamesForDate(date string) ([]string, error)
+	MoveTaskToPreviousDate(taskName string, currentDate string) error
+	TimerGlobalSet(timeScheduler int) error
 }
 
 // ScheduleService handles business logic for schedule management
@@ -202,18 +203,14 @@ func (s *ScheduleService) GetRolloverTasks(currentDay string) ([]entity.Rollover
 	previousDays := s.getPreviousDays(normalizedDay)
 	referenceDate := s.resolveReferenceDate(normalizedDay, currentDayOrdinal)
 
-	// Build task aggregates from all previous days
-	taskMap := s.buildTaskAggregates(schedule, previousDays, referenceDate)
-
-	// Convert aggregates to rollover list
-	return s.buildRolloverList(taskMap), nil
+	// Build per-day deficits and convert to rollover list
+	return s.buildRolloverList(schedule, previousDays, referenceDate), nil
 }
 
-// buildTaskAggregates processes each previous day separately and tracks deficits per day
-func (s *ScheduleService) buildTaskAggregates(schedule entity.WeeklySchedule, previousDays []string, referenceDate time.Time) map[string]*taskAggregate {
-	// Track deficits per day per task: map[taskName]map[day]deficit
-	taskDayDeficits := make(map[string]map[string]int)
-	taskInfo := make(map[string]*taskAggregate)
+// buildTaskDayDeficits tracks deficits per task per day
+// Returns: map[taskName]map[day]deficitInfo
+func (s *ScheduleService) buildTaskDayDeficits(schedule entity.WeeklySchedule, previousDays []string, referenceDate time.Time) map[string]map[string]*dayDeficitInfo {
+	taskDayDeficits := make(map[string]map[string]*dayDeficitInfo)
 
 	// Process each day separately
 	for _, day := range previousDays {
@@ -242,95 +239,78 @@ func (s *ScheduleService) buildTaskAggregates(schedule entity.WeeklySchedule, pr
 			if dayDeficit > 0 {
 				// This day has incomplete work
 				if taskDayDeficits[task.Name] == nil {
-					taskDayDeficits[task.Name] = make(map[string]int)
+					taskDayDeficits[task.Name] = make(map[string]*dayDeficitInfo)
 				}
-				taskDayDeficits[task.Name][day] = dayDeficit
 
-				// Store task info (use first occurrence for metadata)
-				if taskInfo[task.Name] == nil {
-					percent := 100
-					if len(task.Percents) > 0 {
-						percent = task.Percents[0]
-					}
+				percent := 100
+				if len(task.Percents) > 0 {
+					percent = task.Percents[0]
+				}
 
-					taskInfo[task.Name] = &taskAggregate{
-						role:     task.Role,
-						priority: task.Priority,
-						percent:  percent,
-					}
+				taskDayDeficits[task.Name][day] = &dayDeficitInfo{
+					deficit:  dayDeficit,
+					role:     task.Role,
+					priority: task.Priority,
+					percent:  percent,
 				}
 			}
 		}
 	}
 
-	// Now aggregate deficits, tracking the most recent incomplete day
-	taskMap := make(map[string]*taskAggregate)
-	for taskName, dayDeficits := range taskDayDeficits {
-		totalDeficit := 0
-		var mostRecentDay string
-		mostRecentOrdinal := -1
-
-		// Find the most recent day with deficit
-		for day, deficit := range dayDeficits {
-			totalDeficit += deficit
-			dayOrdinal := dayOrder[day]
-			if dayOrdinal > mostRecentOrdinal {
-				mostRecentOrdinal = dayOrdinal
-				mostRecentDay = day
-			}
-		}
-
-		if totalDeficit > 0 && taskInfo[taskName] != nil {
-			taskMap[taskName] = &taskAggregate{
-				totalScheduled: totalDeficit, // Not used anymore, but kept for compatibility
-				totalDone:      0,            // Not used anymore
-				role:           taskInfo[taskName].role,
-				priority:       taskInfo[taskName].priority,
-				percent:        taskInfo[taskName].percent,
-				oldestDay:      mostRecentDay, // Now points to most recent incomplete day
-			}
-
-			slog.Info("Task aggregate calculated",
-				"task", taskName,
-				"total_deficit", totalDeficit,
-				"most_recent_incomplete_day", mostRecentDay,
-				"days_with_deficits", len(dayDeficits))
-		}
-	}
-
-	return taskMap
+	return taskDayDeficits
 }
 
-// buildRolloverList converts task aggregates into rollover task list
-func (s *ScheduleService) buildRolloverList(taskMap map[string]*taskAggregate) []entity.RolloverTask {
+// buildRolloverList creates separate rollover tasks for each day with deficits
+// Prioritized by: oldest day first, then by task priority
+func (s *ScheduleService) buildRolloverList(schedule entity.WeeklySchedule, previousDays []string, referenceDate time.Time) []entity.RolloverTask {
+	// Build per-day deficits
+	taskDayDeficits := s.buildTaskDayDeficits(schedule, previousDays, referenceDate)
+
 	var rollovers []entity.RolloverTask
 
-	for taskName, agg := range taskMap {
-		// totalScheduled now contains the total deficit amount
-		deficit := agg.totalScheduled
-		if deficit > 0 {
+	// Create separate rollover task for each task-day combination
+	for taskName, dayDeficits := range taskDayDeficits {
+		for day, info := range dayDeficits {
 			rollovers = append(rollovers, entity.RolloverTask{
 				TaskName:      taskName,
-				Role:          agg.role,
-				Priority:      agg.priority,
-				RemainingTime: deficit,
-				SourceDay:     agg.oldestDay, // Now points to most recent incomplete day
-				Percent:       agg.percent,
+				Role:          info.role,
+				Priority:      info.priority,
+				RemainingTime: info.deficit,
+				SourceDay:     day,
+				Percent:       info.percent,
 			})
 
 			slog.Info("Rollover task created",
 				"task", taskName,
-				"deficit", deficit,
-				"source_day", agg.oldestDay)
+				"day", day,
+				"deficit", info.deficit,
+				"priority", info.priority)
 		}
 	}
 
 	slog.Info("Calculated rollover tasks", "count", len(rollovers))
+
+	// Sort by oldest day first, then by priority within each day
+	sort.Slice(rollovers, func(i, j int) bool {
+		dayI := dayOrder[rollovers[i].SourceDay]
+		dayJ := dayOrder[rollovers[j].SourceDay]
+
+		// First: order by day (oldest first)
+		if dayI != dayJ {
+			return dayI < dayJ
+		}
+
+		// Second: order by priority (highest first) within same day
+		return rollovers[i].Priority > rollovers[j].Priority
+	})
+
 	return rollovers
 }
 
 // ApplyScheduleToday creates TaskDefinitions for today based on the active schedule
-// It accumulates incomplete time from previous days for recurring tasks
+// It only applies tasks that are scheduled for today (does not include rollover tasks)
+// Tasks not in today's schedule are moved to the previous day (their date is updated)
+// It also sets the global timer to today's total_time
 func (s *ScheduleService) ApplyScheduleToday() error {
 	today := strings.ToLower(time.Now().Weekday().String())
 	todayDate := time.Now().Format("2 January 2006")
@@ -340,61 +320,44 @@ func (s *ScheduleService) ApplyScheduleToday() error {
 		return fmt.Errorf("failed to get today's schedule: %w", err)
 	}
 
-	// Get rollovers and build lookup maps
-	rolloverMap, rolloverTaskInfo := s.buildRolloverMaps(today)
+	// Set the global timer to today's total time
+	if err := s.st.TimerGlobalSet(daySchedule.TotalTime); err != nil {
+		slog.Error("Failed to set global timer", "total_time", daySchedule.TotalTime, "error", err)
+		// Continue even if this fails - don't block task creation
+	} else {
+		slog.Info("Set global timer from schedule", "total_time", daySchedule.TotalTime)
+	}
 
-	// Apply scheduled tasks with rollovers
-	processedTasks := s.applyScheduledTasks(daySchedule, todayDate, rolloverMap)
-
-	// Apply rollover-only tasks
-	s.applyRolloverOnlyTasks(todayDate, rolloverMap, rolloverTaskInfo, processedTasks)
-
-	slog.Info("Applied schedule for today", "day", today, "scheduled_tasks", len(daySchedule.Tasks), "rollover_tasks", len(rolloverMap))
-	return nil
-}
-
-// buildRolloverMaps creates lookup maps for rollover tasks
-func (s *ScheduleService) buildRolloverMaps(today string) (map[string]int, map[string]entity.RolloverTask) {
-	rollovers, err := s.GetRolloverTasks(today)
+	// Get existing tasks for today
+	existingTaskNames, err := s.st.GetTaskNamesForDate(todayDate)
 	if err != nil {
-		slog.Warn("Failed to get rollover tasks", "error", err)
-		return make(map[string]int), make(map[string]entity.RolloverTask)
+		slog.Warn("Failed to get existing tasks", "error", err)
+		existingTaskNames = []string{}
 	}
 
-	rolloverMap := make(map[string]int)
-	rolloverTaskInfo := make(map[string]entity.RolloverTask)
-
-	for _, rollover := range rollovers {
-		rolloverMap[rollover.TaskName] += rollover.RemainingTime
-		if _, exists := rolloverTaskInfo[rollover.TaskName]; !exists {
-			rolloverTaskInfo[rollover.TaskName] = rollover
-		}
-	}
-
-	return rolloverMap, rolloverTaskInfo
-}
-
-// applyScheduledTasks creates task definitions for scheduled tasks (with rollovers if any)
-func (s *ScheduleService) applyScheduledTasks(daySchedule entity.DaySchedule, todayDate string, rolloverMap map[string]int) map[string]bool {
-	processedTasks := make(map[string]bool)
-
+	// Build a set of scheduled task names for quick lookup
+	scheduledTaskNames := make(map[string]bool)
 	for _, scheduleTask := range daySchedule.Tasks {
-		processedTasks[scheduleTask.Name] = true
-		totalTime := scheduleTask.Time
+		scheduledTaskNames[scheduleTask.Name] = true
+	}
 
-		if deficit, exists := rolloverMap[scheduleTask.Name]; exists {
-			totalTime += deficit
-			slog.Info("Adding rollover time to task",
-				"task", scheduleTask.Name,
-				"today_scheduled", scheduleTask.Time,
-				"rollover_deficit", deficit,
-				"total_time", totalTime)
+	// Remove tasks that are not in today's schedule
+	for _, existingTaskName := range existingTaskNames {
+		if !scheduledTaskNames[existingTaskName] {
+			if err := s.st.MoveTaskToPreviousDate(existingTaskName, todayDate); err != nil {
+				slog.Error("Failed to move task to previous date", "task", existingTaskName, "error", err)
+			} else {
+				slog.Info("Moved task to previous date (not in today's schedule)", "task", existingTaskName)
+			}
 		}
+	}
 
+	// Apply only scheduled tasks for today (no rollovers)
+	for _, scheduleTask := range daySchedule.Tasks {
 		taskDef := entity.TaskDefinition{
 			Name:         scheduleTask.Name,
 			Role:         scheduleTask.Role,
-			TimeSchedule: totalTime,
+			TimeSchedule: scheduleTask.Time,
 			Priority:     scheduleTask.Priority,
 			Date:         todayDate,
 		}
@@ -404,42 +367,11 @@ func (s *ScheduleService) applyScheduledTasks(daySchedule entity.DaySchedule, to
 			continue
 		}
 
-		slog.Info("Applied task from schedule", "task", scheduleTask.Name, "time", totalTime, "priority", scheduleTask.Priority)
+		slog.Info("Applied task from today's schedule", "task", scheduleTask.Name, "time", scheduleTask.Time, "priority", scheduleTask.Priority)
 	}
 
-	return processedTasks
-}
-
-// applyRolloverOnlyTasks creates task definitions for rollover tasks not in today's schedule
-func (s *ScheduleService) applyRolloverOnlyTasks(todayDate string, rolloverMap map[string]int, rolloverTaskInfo map[string]entity.RolloverTask, processedTasks map[string]bool) {
-	for taskName, totalDeficit := range rolloverMap {
-		if processedTasks[taskName] {
-			continue
-		}
-
-		rolloverInfo := rolloverTaskInfo[taskName]
-
-		slog.Info("Creating task from rollover only (not in today's schedule)",
-			"task", taskName,
-			"rollover_deficit", totalDeficit,
-			"role", rolloverInfo.Role,
-			"priority", rolloverInfo.Priority)
-
-		taskDef := entity.TaskDefinition{
-			Name:         taskName,
-			Role:         rolloverInfo.Role,
-			TimeSchedule: totalDeficit,
-			Priority:     rolloverInfo.Priority,
-			Date:         todayDate,
-		}
-
-		if err := s.st.CreateTask(taskDef); err != nil {
-			slog.Error("Failed to create rollover task", "task", taskName, "error", err)
-			continue
-		}
-
-		slog.Info("Applied rollover task", "task", taskName, "time", totalDeficit, "priority", rolloverInfo.Priority)
-	}
+	slog.Info("Applied schedule for today", "day", today, "scheduled_tasks", len(daySchedule.Tasks), "total_time", daySchedule.TotalTime)
+	return nil
 }
 
 // Helper: validateScheduleRequest validates a schedule request

@@ -39,6 +39,8 @@ type Storage interface {
 	// GetTaskRecordToday(opts ...TaskRecordOption) ([]TaskRecord, error)
 	// WithCheckBusinessDay(check bool) TaskRecordOption
 	CreateTask(task entity.TaskDefinition) error
+	GetTaskNamesForDate(date string) ([]string, error)
+	MoveTaskToPreviousDate(taskName string, currentDate string) error
 
 	// Schedule management
 	CreateSchedule(schedule entity.WeeklySchedule) (string, error)

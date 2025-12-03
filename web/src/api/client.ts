@@ -62,6 +62,8 @@ export interface RestRecordRequest { rest_time: number }
 export interface CreateTaskRequest { task_name: string; role: string }
 export interface TimerSetRequest { count: number }
 export interface TimerResponse { time_duration: number }
+export interface TimerGlobalResponse { timer_global: number }
+export interface TimerGlobalSetRequest { time_scheduler: number }
 
 // Records summary (today/yesterday/all)
 export interface RecordsSummary {
@@ -176,6 +178,8 @@ export const api = {
   // Timer
   timerGet: () => request<TimerResponse>('GET', '/api/v1/timer/get'),
   timerSet: (payload: TimerSetRequest) => request<SuccessResponse>('POST', '/api/v1/timer/set', payload),
+  timerGlobalGet: () => request<TimerGlobalResponse>('GET', '/api/v1/manage/timer/global'),
+  timerGlobalSet: (payload: TimerGlobalSetRequest) => request<SuccessResponse>('POST', '/api/v1/manage/timer/global', payload),
 
   // Schedule
   createSchedule: (payload: ScheduleRequest) => 

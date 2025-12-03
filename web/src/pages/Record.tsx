@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import Button from '@mui/material/Button'
+import FormControl from '@mui/material/FormControl'
 import Grid from '@mui/material/Grid'
 import InputAdornment from '@mui/material/InputAdornment'
+import InputLabel from '@mui/material/InputLabel'
+import MenuItem from '@mui/material/MenuItem'
+import Select from '@mui/material/Select'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined'
@@ -10,9 +14,12 @@ import { api } from '../api/client'
 import Alert from '../components/Alert'
 import Card from '../components/Card'
 
+const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
 export default function Record() {
   const [taskName, setTaskName] = useState('')
   const [timeDone, setTimeDone] = useState('')
+  const [sourceDay, setSourceDay] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -23,10 +30,18 @@ export default function Record() {
     if (!taskName) { setError('Task name required'); return }
     if (Number.isNaN(minutes) || minutes <= 0) { setError('Time must be positive integer'); return }
     try {
-      await api.addTaskRecord({ task_name: taskName, time_done: minutes })
+      const payload: { task_name: string; time_done: number; source_day?: string } = {
+        task_name: taskName,
+        time_done: minutes
+      }
+      if (sourceDay) {
+        payload.source_day = sourceDay
+      }
+      await api.addTaskRecord(payload)
       setMsg('Record saved')
       setTaskName('')
       setTimeDone('')
+      setSourceDay('')
     } catch (e: any) { setError(e.message) }
   }
 
@@ -51,6 +66,24 @@ export default function Record() {
               InputProps={{ endAdornment: <InputAdornment position="end">min</InputAdornment> }}
               required
             />
+            <FormControl>
+              <InputLabel id="source-day-label">Source Day (optional)</InputLabel>
+              <Select
+                labelId="source-day-label"
+                label="Source Day (optional)"
+                value={sourceDay}
+                onChange={(e) => setSourceDay(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>Today</em>
+                </MenuItem>
+                {DAYS_OF_WEEK.map((day) => (
+                  <MenuItem key={day} value={day}>
+                    {day.charAt(0).toUpperCase() + day.slice(1)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <Stack direction="row" justifyContent="flex-end">
               <Button variant="contained" type="submit" startIcon={<SaveRoundedIcon />}>
                 Save

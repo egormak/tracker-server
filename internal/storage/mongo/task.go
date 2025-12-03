@@ -346,3 +346,57 @@ func (s *Storage) CreateTask(taskDefinition entity.TaskDefinition) error {
 
 	return nil
 }
+
+// GetTaskNamesForDate returns all task names for a specific date
+func (s *Storage) GetTaskNamesForDate(date string) ([]string, error) {
+	coll := s.Client.Database(dbName).Collection(taskNamesList)
+
+	cursor, err := coll.Find(s.Context, bson.M{"date": date})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tasks for date: %w", err)
+	}
+	defer cursor.Close(s.Context)
+
+	var taskNames []string
+	for cursor.Next(s.Context) {
+		var task entity.TaskDefinition
+		if err := cursor.Decode(&task); err != nil {
+			return nil, fmt.Errorf("failed to decode task: %w", err)
+		}
+		taskNames = append(taskNames, task.Name)
+	}
+
+	return taskNames, nil
+}
+
+// MoveTaskToPreviousDate moves a task to the previous day by updating its date
+func (s *Storage) MoveTaskToPreviousDate(taskName string, currentDate string) error {
+	coll := s.Client.Database(dbName).Collection(taskNamesList)
+
+	// Parse the current date
+	parsedDate, err := time.Parse("2 January 2006", currentDate)
+	if err != nil {
+		return fmt.Errorf("failed to parse date: %w", err)
+	}
+
+	// Set date to previous day
+	previousDate := parsedDate.AddDate(0, 0, -1).Format("2 January 2006")
+
+	filter := bson.M{"name": taskName, "date": currentDate}
+	update := bson.M{
+		"$set": bson.M{
+			"date": previousDate,
+		},
+	}
+
+	result, err := coll.UpdateOne(s.Context, filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to move task to previous date: %w", err)
+	}
+
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("task not found: %s", taskName)
+	}
+
+	return nil
+}
