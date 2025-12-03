@@ -191,9 +191,30 @@ paths:
     get:
       tags:
         - Task
+        - Schedule
       summary: Get task plan percent with schedule awareness
-      description: Get the next task based on plan percentage, considering weekly schedule and rollover tasks
+      description: |
+        Get the next task based on plan percentage, considering weekly schedule and rollover tasks.
+        
+        **Two modes of operation:**
+        1. **Automatic selection** (no task_name): Returns the next available task based on schedule priority
+        2. **Specific task search** (with task_name): Searches for a specific task by name from Monday through today, finding available rollover tasks from previous days
+        
+        When searching for a specific task, the endpoint searches from Monday of the current week to today (current day), checking both:
+        - Rollover tasks (incomplete tasks from previous days) - these will have source_day field populated
+        - Today's scheduled tasks - these will have source_day empty or omitted
       operationId: getTaskPlanPercentWithSchedule
+      parameters:
+        - name: task_name
+          in: query
+          required: false
+          description: |
+            Optional. Name of a specific task to search for in the schedule.
+            If provided, searches from Monday through today for this task.
+            If not provided, returns the next task based on automatic schedule selection.
+          schema:
+            type: string
+          example: "work"
       responses:
         '200':
           description: Task plan percentage retrieved successfully with schedule context
@@ -201,12 +222,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlanPercentResponse"
-        '404':
-          description: No tasks available
+              examples:
+                automaticSelection:
+                  summary: Automatic task selection (no task_name provided)
+                  value:
+                    task_name: "learn"
+                    percent: 80
+                    time_left: 90
+                    source_day: ""
+                rolloverTask:
+                  summary: Specific task from previous day (Monday)
+                  value:
+                    task_name: "work"
+                    percent: 50
+                    time_left: 120
+                    source_day: "monday"
+                todayTask:
+                  summary: Specific task from today
+                  value:
+                    task_name: "learn"
+                    percent: 80
+                    time_left: 90
+                    source_day: ""
+        '400':
+          description: Missing or invalid task_name parameter (only when task_name is provided but empty)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+              example:
+                status: "error"
+                message: "task_name parameter is required"
+        '404':
+          description: No tasks available or specific task not found in schedule from Monday to today
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                taskNotFound:
+                  summary: Specific task not found
+                  value:
+                    status: "error"
+                    message: "Task 'exercise' not found in schedule from Monday to Wednesday"
+                noTasksAvailable:
+                  summary: No tasks available (automatic mode)
+                  value:
+                    status: "error"
+                    message: "No tasks available"
         '500':
           description: Internal server error
           content:

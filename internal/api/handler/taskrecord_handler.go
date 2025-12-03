@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/services"
@@ -20,6 +21,7 @@ type taskRecordService interface {
 	// GetTasksNext() (entity.TasksNextResponse, error)
 	GetTaskPlanPercent() (entity.PlanPercentResponse, error)
 	GetTaskPlanPercentWithSchedule(scheduleService services.ScheduleServiceProvider) (entity.PlanPercentResponse, error)
+	GetTaskByNameSchedule(taskName string, scheduleService services.ScheduleServiceProvider) (entity.PlanPercentResponse, error)
 }
 
 type planPercentStorage interface {
@@ -130,7 +132,16 @@ func (t *TaskRecordHandler) GetTaskPlanPercent(c *fiber.Ctx) error {
 }
 
 // GetTaskPlanPercentWithSchedule returns next task considering weekly schedule and rollovers
+// If task_name query parameter is provided, searches for that specific task
 func (t *TaskRecordHandler) GetTaskPlanPercentWithSchedule(c *fiber.Ctx) error {
+	taskName := c.Query("task_name")
+
+	// If task_name is provided, use the task-specific search
+	if taskName != "" {
+		slog.Info("Get request GetTaskPlanPercentWithSchedule with task_name", "task_name", taskName)
+		return t.GetTaskByNameSchedule(c)
+	}
+
 	slog.Info("Get request GetTaskPlanPercentWithSchedule")
 
 	// If no schedule service is configured, fall back to regular plan percent
@@ -153,6 +164,48 @@ func (t *TaskRecordHandler) GetTaskPlanPercentWithSchedule(c *fiber.Ctx) error {
 	}
 
 	slog.Info("Sent answer", "request", "GetTaskPlanPercentWithSchedule", "answer", answer)
+	return c.Status(200).JSON(answer)
+}
+
+// GetTaskByNameSchedule returns a specific task by name with schedule awareness
+// Searches from Monday through today for available rollover tasks
+func (t *TaskRecordHandler) GetTaskByNameSchedule(c *fiber.Ctx) error {
+	taskName := c.Query("task_name")
+
+	slog.Info("Get request GetTaskByNameSchedule", "task_name", taskName)
+
+	if taskName == "" {
+		slog.Error("Missing task_name parameter")
+		return c.Status(400).JSON(&fiber.Map{
+			"status":  "error",
+			"message": "task_name parameter is required",
+		})
+	}
+
+	// If no schedule service is configured, return error
+	if t.scheduleService == nil {
+		slog.Error("No schedule service configured")
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": "Schedule service not available",
+		})
+	}
+
+	answer, err := t.srv.GetTaskByNameSchedule(taskName, t.scheduleService)
+	if err != nil {
+		statusCode := 500
+		// Check if it's a not found error
+		if strings.Contains(err.Error(), "not found") {
+			statusCode = 404
+		}
+		slog.Error("Error getting task by name from schedule", "err", err, "task_name", taskName)
+		return c.Status(statusCode).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	slog.Info("Sent answer", "request", "GetTaskByNameSchedule", "task_name", taskName, "answer", answer)
 	return c.Status(200).JSON(answer)
 }
 
