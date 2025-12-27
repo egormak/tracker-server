@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import Grid from '@mui/material/Grid'
@@ -8,9 +8,10 @@ import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
+import Autocomplete from '@mui/material/Autocomplete'
 import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined'
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
-import { api } from '../api/client'
+import { api, TaskResult } from '../api/client'
 import Alert from '../components/Alert'
 import Card from '../components/Card'
 
@@ -22,6 +23,19 @@ export default function Record() {
   const [sourceDay, setSourceDay] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [availableTasks, setAvailableTasks] = useState<TaskResult[]>([])
+
+  useEffect(() => {
+    const loadTasks = async () => {
+      try {
+        const tasks = await api.getTaskList()
+        setAvailableTasks(tasks)
+      } catch (e) {
+        console.error("Failed to load tasks", e)
+      }
+    }
+    loadTasks()
+  }, [])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,6 +59,9 @@ export default function Record() {
     } catch (e: any) { setError(e.message) }
   }
 
+  // Find selected task role if possible, though currently not needed for submit, 
+  // backend handles role lookup if not provided, but addTaskRecord API usually takes just name.
+
   return (
     <Grid container spacing={3}>
       <Grid item xs={12} md={6}>
@@ -52,12 +69,21 @@ export default function Record() {
           {error && <Alert type="error">{error}</Alert>}
           {msg && <Alert type="success">{msg}</Alert>}
           <Stack component="form" onSubmit={submit} spacing={2} sx={{ maxWidth: 460 }}>
-            <TextField
-              label="Task Name"
+
+            <Autocomplete
+              options={availableTasks.map(t => t.name)}
               value={taskName}
-              onChange={(e) => setTaskName(e.target.value)}
-              required
+              onChange={(_, newValue) => setTaskName(newValue || '')}
+              freeSolo={false} // Restrict to existing tasks
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Task Name"
+                  required
+                />
+              )}
             />
+
             <TextField
               label="Time Done (min)"
               value={timeDone}

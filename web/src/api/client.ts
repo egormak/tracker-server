@@ -200,4 +200,11 @@ export const api = {
     request<RolloverResponse>('GET', `/api/v1/schedule/active/rollover${day ? `?day=${day}` : ''}`),
   applySchedule: () => 
     request<SuccessResponse>('POST', '/api/v1/schedule/apply'),
+
+  // Running Timer
+  startTask: (payload: { task_name: string; role: string }) => request<{ status: string; data: RunningTask }>('POST', '/api/v1/timer/run/start', payload),
+  stopTask: () => request<{ status: string; data: TaskRecord }>('POST', '/api/v1/timer/run/stop'),
+  pauseTask: () => request<{ status: string; data: RunningTask }>('POST', '/api/v1/timer/run/pause'),
+  resumeTask: () => request<{ status: string; data: RunningTask }>('POST', '/api/v1/timer/run/resume'),
+  getTaskStatus: () => request<{ status: string; data: RunningTask }>('GET', '/api/v1/timer/run/status'),
 }

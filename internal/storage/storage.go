@@ -51,4 +51,9 @@ type Storage interface {
 	DeleteSchedule(id string) error
 	SetActiveSchedule(id string) error
 	GetDaySchedule(day string) (entity.DaySchedule, error)
+
+	// Running Task
+	GetRunningTask() (entity.RunningTask, error)
+	UpsertRunningTask(task entity.RunningTask) error
+	DeleteRunningTask() error
 }

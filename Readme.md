@@ -109,3 +109,62 @@ Legacy helpers (still wired):
 ## Notes
 - Default server port: 3000
 - Ensure MongoDB is reachable from the container/host
+
+## Architecture Graph
+
+```mermaid
+graph TD
+    Client[Web UI / Client] -->|HTTP Request| Router[Router /api/v1]
+    
+    subgraph Handlers
+        H_RunTask[RunningTask Handler]
+        H_Manage[Manage Handler]
+        H_Rest[Rest Handler]
+        H_Sched[Schedule Handler]
+        H_Stat[Statistic Handler]
+        H_Task[Task Handler]
+        H_Rec[TaskRecord Handler]
+    end
+    
+    Router -->|/timer/run/*| H_RunTask
+    Router -->|/manage/*| H_Manage
+    Router -->|/rest/*| H_Rest
+    Router -->|/schedule/*| H_Sched
+    Router -->|/stats/*| H_Stat
+    Router -->|/task/*| H_Task
+    Router -->|/taskrecord| H_Rec
+
+    subgraph Services
+        S_RunTask[RunningTask Service]
+        S_Manage[Manage Service]
+        S_Rest[Rest Service]
+        S_Sched[Schedule Service]
+        S_Stat[Statistic Service]
+        S_Task[Task Service]
+        S_Rec[TaskRecord Service]
+    end
+
+    H_RunTask --> S_RunTask
+    H_Manage --> S_Manage
+    H_Rest --> S_Rest
+    H_Sched --> S_Sched
+    H_Stat --> S_Stat
+    H_Task --> S_Task
+    H_Rec --> S_Rec
+
+    subgraph Storage
+        Store[Storage Interface]
+        Mongo[Mongo Implementation]
+    end
+
+    S_RunTask --> Store
+    S_Manage --> Store
+    S_Rest --> Store
+    S_Sched --> Store
+    S_Stat --> Store
+    S_Task --> Store
+    S_Rec --> Store
+
+    Store -.->|Implements| Mongo
+    Mongo -->|Reads/Writes| DB[(MongoDB)]
+```

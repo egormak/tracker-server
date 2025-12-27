@@ -21,6 +21,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	statsService := services.NewStatisticService(mongoconn)
 	manageService := services.NewManageService(mongoconn)
 	scheduleService := services.NewScheduleService(mongoconn)
+	runningTaskService := services.NewRunningTaskService(mongoconn)
 
 	// Handlers
 	// Task (with storage access for legacy endpoints)
@@ -35,6 +36,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	manageHandler := handler.NewManageHandler(manageService)
 	// Schedule
 	scheduleHandler := handler.NewScheduleHandler(scheduleService)
+	// Running Task
+	runningTaskHandler := handler.NewRunningTaskHandler(runningTaskService)
 
 	// OLD Logic (manage and role handlers still needed for legacy routes)
 	roleHandler := role.New(mongoconn, notify)
@@ -115,6 +118,14 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Put("/v1/schedule/:id", scheduleHandler.UpdateSchedule)
 	api.Delete("/v1/schedule/:id", scheduleHandler.DeleteSchedule)
 	api.Put("/v1/schedule/:id/activate", scheduleHandler.SetActiveSchedule)
+
+	// Running Task
+
+	api.Post("/v1/timer/run/start", runningTaskHandler.Start)
+	api.Post("/v1/timer/run/stop", runningTaskHandler.Stop)
+	api.Post("/v1/timer/run/pause", runningTaskHandler.Pause)
+	api.Post("/v1/timer/run/resume", runningTaskHandler.Resume)
+	api.Get("/v1/timer/run/status", runningTaskHandler.Status)
 
 	app.Get("/", welcome.Welcome)
 }
