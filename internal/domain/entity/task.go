@@ -8,9 +8,10 @@ type TaskRecord struct {
 }
 
 type TaskRecordRequest struct {
-	TaskName  string `json:"task_name"`
-	TimeDone  int    `json:"time_done"`
-	SourceDay string `json:"source_day,omitempty"` // Optional: "monday", "tuesday", etc. If empty, uses today
+	TaskName        string `json:"task_name"`
+	TimeDone        int    `json:"time_done"`
+	SourceDay       string `json:"source_day,omitempty"`        // Optional: "monday", "tuesday", etc. If empty, uses today
+	ManageByService bool   `json:"manage_by_service,omitempty"` // If true, distributes time to past unfilled schedules
 }
 
 type TaskResult struct {

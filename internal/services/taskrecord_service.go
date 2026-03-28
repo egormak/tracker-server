@@ -22,6 +22,8 @@ type TaskRecordStorage interface {
 	DelGroupPercent(groupName string) error
 	GetTodayTaskDuration(taskName string) (int, error)
 	GetTaskParams(taskName string) (entity.TaskParams, error)
+	GetActiveSchedule() (entity.WeeklySchedule, error)
+	GetTaskDurationForDate(taskName string, date string) (int, error)
 }
 
 type TaskRecordService struct {
@@ -67,10 +69,146 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 			"calculated_date", recordDate,
 			"today_date", todayDate,
 			"dates_different", recordDate != todayDate)
+	} else if taskRecordRequest.ManageByService {
+		// New Logic: Backfill Schedule
+		// 1. Get Active Schedule
+		schedule, err := s.st.GetActiveSchedule()
+		if err == nil { // If no active schedule, skip this logic
+			// 2. Iterate from Monday to Yesterday
+			weekDays := []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+			todayWeekday := time.Now().Weekday()
+			// Convertible to our string format (Monday=1, Sunday=0 in Go's time, but let's just use string comparison or simple mapping if needed)
+			// Actually simpler: iterate our weekDays list until we hit "today"
+
+			// Map Go's Weekday (Sun=0, Mon=1...) to index in our list (Mon=0, Sun=6)
+			// specific logic for "today" to stop before it
+			todayIndex := -1
+			// todayStr := time.Now().Format("Monday") // "Monday", "Tuesday"...
+			for i, d := range weekDays {
+				// simple case insensitive check or just use the fact they match mostly
+				if d == "monday" && todayWeekday == time.Monday {
+					todayIndex = i
+				} else if d == "tuesday" && todayWeekday == time.Tuesday {
+					todayIndex = i
+				} else if d == "wednesday" && todayWeekday == time.Wednesday {
+					todayIndex = i
+				} else if d == "thursday" && todayWeekday == time.Thursday {
+					todayIndex = i
+				} else if d == "friday" && todayWeekday == time.Friday {
+					todayIndex = i
+				} else if d == "saturday" && todayWeekday == time.Saturday {
+					todayIndex = i
+				} else if d == "sunday" && todayWeekday == time.Sunday {
+					todayIndex = i
+				}
+			}
+
+			if todayIndex > 0 {
+				slog.Info("Checking past days for backfill", "today_index", todayIndex)
+				remainingTime := taskRecordRequest.TimeDone
+
+				for i := 0; i < todayIndex; i++ {
+					if remainingTime <= 0 {
+						break
+					}
+					checkDay := weekDays[i]
+
+					// Get scheduled time for this task on checkDay
+					scheduledTime := 0
+					var daySchedule entity.DaySchedule
+					switch checkDay {
+					case "monday":
+						daySchedule = schedule.Monday
+					case "tuesday":
+						daySchedule = schedule.Tuesday
+					case "wednesday":
+						daySchedule = schedule.Wednesday
+					case "thursday":
+						daySchedule = schedule.Thursday
+					case "friday":
+						daySchedule = schedule.Friday
+					case "saturday":
+						daySchedule = schedule.Saturday
+					case "sunday":
+						daySchedule = schedule.Sunday
+					}
+
+					for _, t := range daySchedule.Tasks {
+						if t.Name == taskRecordRequest.TaskName {
+							scheduledTime = t.Time
+							break
+						}
+					}
+
+					if scheduledTime > 0 {
+						// Check how much is already done for checkDay
+						// Need to calculate date for that day
+						dateForDay := service.CalculateDateForDay(checkDay)
+						doneTime, err := s.st.GetTaskDurationForDate(taskRecordRequest.TaskName, dateForDay)
+						if err != nil {
+							slog.Error("failed to get task duration for backfill", "day", checkDay, "err", err)
+							continue
+						}
+
+						if doneTime < scheduledTime {
+							needed := scheduledTime - doneTime
+							fillAmount := 0
+							if remainingTime >= needed {
+								fillAmount = needed
+							} else {
+								fillAmount = remainingTime
+							}
+
+							if fillAmount > 0 {
+								// Create record for this past day
+								slog.Info("Backfilling task",
+									"task", taskRecordRequest.TaskName,
+									"day", checkDay,
+									"amount", fillAmount)
+
+								pastRecord := entity.TaskRecord{
+									Name:         taskRecordRequest.TaskName,
+									Role:         taskRole,
+									TimeDuration: fillAmount,
+									Date:         dateForDay,
+								}
+								if err := s.st.AddTaskRecord(pastRecord); err != nil {
+									slog.Error("failed to add backfill record", "err", err)
+								} else {
+									// Update remaining time
+									remainingTime -= fillAmount
+
+									// Also add role minutes and rest for consistency?
+									// Usually yes, as it counts towards that day's stats
+									s.st.AddRoleMinutes(pastRecord)
+									// Assuming rest is calculated daily or simply added to pool,
+									// if pool is global, we add it.
+									s.st.AddRest(fillAmount)
+								}
+							}
+						}
+					}
+				}
+				// Update the request with remaining time for today
+				taskRecordRequest.TimeDone = remainingTime
+				slog.Info("Finished backfill", "remaining_for_today", taskRecordRequest.TimeDone)
+			}
+		} else {
+			slog.Warn("ManageByService requested but could not get active schedule", "err", err)
+		}
+
 	} else {
 		slog.Info("⚠️  NO SOURCE DAY - Recording against TODAY",
 			"task", taskRecordRequest.TaskName,
 			"record_date", recordDate)
+	}
+
+	// If all time was used in backfill, we can return early or record 0?
+	// The original logic records whatever is in taskRecordRequest.TimeDone.
+	// If it's 0, we might strictly skip recording a 0-minute entry.
+	if taskRecordRequest.TimeDone <= 0 {
+		slog.Info("All time distributed to past schedules, nothing left for today.")
+		return nil
 	}
 
 	record := entity.TaskRecord{
