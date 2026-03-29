@@ -1,21 +1,26 @@
-FROM golang:1.24.2 AS builder
+FROM golang:1.25.1-alpine AS builder
 
 ENV TZ=Europe/Kiev
+ENV CGO_ENABLED=0
+ENV GOOS=linux
 
 WORKDIR /src/
 
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 
-# RUN go get -d -v ./
 RUN go build -o /out/app cmd/server/main.go
 
-FROM ubuntu:24.10 AS bin
+FROM alpine:3.21 AS bin
 
 ENV TZ=Europe/Kiev
 
-RUN apt update && \
-    apt install -y ca-certificates
+RUN apk add --no-cache ca-certificates tzdata && \
+    cp /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone
 
-COPY --from=builder /out/app /
+COPY --from=builder /out/app /app
 
 CMD ["/app"]
