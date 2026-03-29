@@ -24,7 +24,7 @@ func NewRunningTaskService(st RunningTaskStorage) *RunningTaskService {
 	return &RunningTaskService{st: st}
 }
 
-func (s *RunningTaskService) Start(taskName string, role string) (entity.RunningTask, error) {
+func (s *RunningTaskService) Start(taskName string, role string, targetDuration int, sourceDay string) (entity.RunningTask, error) {
 	// Check if already running
 	existing, err := s.st.GetRunningTask()
 	if err == nil && existing.IsRunning {
@@ -45,10 +45,12 @@ func (s *RunningTaskService) Start(taskName string, role string) (entity.Running
 	}
 
 	task := entity.RunningTask{
-		TaskName:  taskName,
-		Role:      role,
-		StartTime: time.Now(),
-		IsRunning: true,
+		TaskName:       taskName,
+		Role:           role,
+		StartTime:      time.Now(),
+		IsRunning:      true,
+		TargetDuration: targetDuration,
+		SourceDay:      sourceDay,
 	}
 
 	if err := s.st.UpsertRunningTask(task); err != nil {
@@ -82,6 +84,7 @@ func (s *RunningTaskService) Stop() (entity.TaskRecord, error) {
 		Role:         task.Role,
 		TimeDuration: duration,
 		Date:         time.Now().Format("2 January 2006"),
+		SourceDay:    task.SourceDay, // Apply the source day when stopping
 	}
 
 	// Save Record

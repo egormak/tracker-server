@@ -5,6 +5,7 @@ type TaskRecord struct {
 	Role         string
 	TimeDuration int
 	Date         string
+	SourceDay    string
 }
 
 type TaskRecordRequest struct {

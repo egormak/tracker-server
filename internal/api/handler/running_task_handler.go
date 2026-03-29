@@ -17,16 +17,18 @@ func NewRunningTaskHandler(service *services.RunningTaskService) *RunningTaskHan
 
 func (h *RunningTaskHandler) Start(c *fiber.Ctx) error {
 	var body struct {
-		TaskName string `json:"task_name"`
-		Role     string `json:"role"`
+		TaskName       string `json:"task_name"`
+		Role           string `json:"role"`
+		TargetDuration int    `json:"target_duration"`
+		SourceDay      string `json:"source_day"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(400).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}
 
-	slog.Info("RunningTaskHandler.Start", "task", body.TaskName, "role", body.Role)
+	slog.Info("RunningTaskHandler.Start", "task", body.TaskName, "role", body.Role, "target_duration", body.TargetDuration, "source_day", body.SourceDay)
 
-	task, err := h.service.Start(body.TaskName, body.Role)
+	task, err := h.service.Start(body.TaskName, body.Role, body.TargetDuration, body.SourceDay)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}
