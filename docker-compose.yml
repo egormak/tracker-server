@@ -24,18 +24,6 @@ services:
     networks:
       - tracker
 
-  web:
-    build:
-      context: ./web
-    image: ghcr.io/egormak/tracker-web:${TAG:-dev}
-    depends_on:
-      - api
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-    networks:
-      - tracker
-
 volumes:
   mongo-data:
 
