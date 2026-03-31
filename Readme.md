@@ -10,7 +10,7 @@ docker run -d \
   --name tracker \
   --network=tracker \
   -v /home/docker/tracker/config.yaml:/config.yaml \
-  ghcr.io/egormak/tracker-server:2025-05-07
+  ghcr.io/egormak/tracker-server:2026-03-30
 ```
 
 *Note: Ensure your `config.yaml` is correctly configured and the `tracker` network exists.*

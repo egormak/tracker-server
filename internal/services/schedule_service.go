@@ -167,26 +167,34 @@ func (s *ScheduleService) GetTodaySchedule() (*entity.ActiveSchedule, error) {
 		return nil, fmt.Errorf("failed to get today's schedule: %w", err)
 	}
 
-	// Get rollover tasks from previous days
-	rollovers, err := s.GetRolloverTasks(today)
+	// Get rollover tasks from all deficit days (including today)
+	allRollovers, err := s.GetRolloverTasks(today)
 	if err != nil {
 		slog.Warn("Failed to get rollover tasks", "error", err)
 		// Continue without rollovers rather than failing
-		rollovers = []entity.RolloverTask{}
+		allRollovers = []entity.RolloverTask{}
+	}
+
+	// Filter out today's tasks so they don't duplicate in the web UI's "Rollover Tasks" section
+	var pastRollovers []entity.RolloverTask
+	for _, r := range allRollovers {
+		if r.SourceDay != today {
+			pastRollovers = append(pastRollovers, r)
+		}
 	}
 
 	activeSchedule := &entity.ActiveSchedule{
 		Day:           today,
 		TotalTime:     daySchedule.TotalTime,
 		Tasks:         daySchedule.Tasks,
-		RolloverTasks: rollovers,
+		RolloverTasks: pastRollovers,
 		PlanGroup:     daySchedule.PlanGroup,
 	}
 
 	return activeSchedule, nil
 }
 
-// GetRolloverTasks calculates incomplete tasks from previous days
+// GetRolloverTasks calculates incomplete tasks from previous days and today
 // It aggregates by task name: total scheduled - total done across all previous days
 func (s *ScheduleService) GetRolloverTasks(currentDay string) ([]entity.RolloverTask, error) {
 	schedule, err := s.st.GetActiveSchedule()
@@ -200,11 +208,11 @@ func (s *ScheduleService) GetRolloverTasks(currentDay string) ([]entity.Rollover
 		normalizedDay = strings.ToLower(time.Now().Weekday().String())
 		currentDayOrdinal = dayOrder[normalizedDay]
 	}
-	previousDays := s.getPreviousDays(normalizedDay)
+	deficitDays := s.getDeficitDays(normalizedDay)
 	referenceDate := s.resolveReferenceDate(normalizedDay, currentDayOrdinal)
 
 	// Build per-day deficits and convert to rollover list
-	return s.buildRolloverList(schedule, previousDays, referenceDate), nil
+	return s.buildRolloverList(schedule, deficitDays, referenceDate), nil
 }
 
 // buildTaskDayDeficits tracks deficits per task per day
@@ -405,19 +413,19 @@ func (s *ScheduleService) validateScheduleRequest(request entity.ScheduleRequest
 	return nil
 }
 
-// Helper: getPreviousDays returns all days before the current day in the week
-func (s *ScheduleService) getPreviousDays(currentDay string) []string {
+// Helper: getDeficitDays returns all days up to and including the current day in the week
+func (s *ScheduleService) getDeficitDays(currentDay string) []string {
 	currentOrdinal := dayOrder[strings.ToLower(currentDay)]
 	days := []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
 
-	var previousDays []string
+	var deficitDays []string
 	for _, day := range days {
-		if dayOrder[day] < currentOrdinal {
-			previousDays = append(previousDays, day)
+		if dayOrder[day] <= currentOrdinal {
+			deficitDays = append(deficitDays, day)
 		}
 	}
 
-	return previousDays
+	return deficitDays
 }
 
 // Helper: getDayScheduleFromWeekly extracts a specific day's schedule from weekly schedule
