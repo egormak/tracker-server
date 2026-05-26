@@ -43,7 +43,7 @@ func main() {
 	// Use the logger middleware
 	app.Use(logger.New(logger.Config{}))
 
-	routes.RegisterRoutes(app, mongoconn, notify)
+	routes.RegisterRoutes(app, mongoconn, notify, cfg)
 
 	// Start the server
 	log.Fatal(app.Listen(":3000"))

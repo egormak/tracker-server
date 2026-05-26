@@ -14,8 +14,9 @@ type Config struct {
 		Name string `yaml:"name"`
 	} `yaml:"mongodb"`
 	Telegram struct {
-		APIKey string `yaml:"api_key"`
-		RoomID int64  `yaml:"room_id"`
+		APIKey           string `yaml:"api_key"`
+		RoomID           int64  `yaml:"room_id"`
+		EnableWebappAuth bool   `yaml:"enable_webapp_auth"`
 	} `yaml:"telegram"`
 }
 

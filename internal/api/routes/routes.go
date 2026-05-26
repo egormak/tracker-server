@@ -1,7 +1,9 @@
 package routes
 
 import (
+	"tracker-server/config"
 	"tracker-server/internal/api/handler"
+	"tracker-server/internal/api/middleware"
 	"tracker-server/internal/handler/manage"
 	"tracker-server/internal/handler/role"
 	"tracker-server/internal/handler/welcome"
@@ -12,7 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify) {
+func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify, cfg config.Config) {
 
 	// Services
 	taskService := services.NewTaskService(mongoconn, notify)
@@ -45,7 +47,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	//
 
 	// Routes
-	api := app.Group("/api")
+	tgAuth := middleware.TelegramAuth(cfg)
+	api := app.Group("/api", tgAuth)
 	// Task
 	api.Get("/v1/task/params", taskHandler.TaskParams)
 	api.Get("/v1/record/params", taskHandler.TaskParams)         // Legacy endpoint - same handler
