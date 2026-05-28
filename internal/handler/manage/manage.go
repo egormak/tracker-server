@@ -3,6 +3,7 @@ package manage
 import (
 	"fmt"
 	"log/slog"
+	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/notify"
 	"tracker-server/internal/storage"
 
@@ -67,7 +68,7 @@ func (m *Manage) ProcentsSet(c *fiber.Ctx) error {
 	procentM, err := m.st.GetPlanProcents()
 	if err != nil {
 		if err == storage.ErrListEmpty {
-			procentM = storage.Procents{}
+			procentM = entity.PlanPercents{}
 		} else {
 			slog.Error("Error getting plan procents", "err", err)
 			return c.Status(500).JSON(&fiber.Map{

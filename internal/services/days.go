@@ -1,4 +1,4 @@
-package service
+package services
 
 import (
 	"log/slog"
@@ -76,4 +76,13 @@ func CalculateDateForDay(sourceDay string) string {
 		"target_weekday", targetDate.Weekday().String())
 
 	return formattedDate
+}
+
+// DayIndex returns the index of the weekday starting with Monday=0 to Sunday=6
+func DayIndex(weekday time.Weekday) int {
+	idx := int(weekday) - 1
+	if idx < 0 {
+		return 6 // Sunday
+	}
+	return idx
 }

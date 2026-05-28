@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"time"
 	"tracker-server/internal/domain/entity"
-	"tracker-server/internal/service"
 )
 
 type TaskRecordStorage interface {
@@ -24,6 +23,8 @@ type TaskRecordStorage interface {
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	GetActiveSchedule() (entity.WeeklySchedule, error)
 	GetTaskDurationForDate(taskName string, date string) (int, error)
+	GetRecords() ([]entity.TaskRecord, error)
+	CleanRecords()
 }
 
 type TaskRecordService struct {
@@ -62,7 +63,7 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 		"current_weekday", time.Now().Weekday().String())
 
 	if taskRecordRequest.SourceDay != "" {
-		recordDate = service.CalculateDateForDay(taskRecordRequest.SourceDay)
+		recordDate = CalculateDateForDay(taskRecordRequest.SourceDay)
 		slog.Info("✅ Recording task against SOURCE DAY",
 			"task", taskRecordRequest.TaskName,
 			"source_day", taskRecordRequest.SourceDay,
@@ -77,31 +78,7 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 			// 2. Iterate from Monday to Yesterday
 			weekDays := []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
 			todayWeekday := time.Now().Weekday()
-			// Convertible to our string format (Monday=1, Sunday=0 in Go's time, but let's just use string comparison or simple mapping if needed)
-			// Actually simpler: iterate our weekDays list until we hit "today"
-
-			// Map Go's Weekday (Sun=0, Mon=1...) to index in our list (Mon=0, Sun=6)
-			// specific logic for "today" to stop before it
-			todayIndex := -1
-			// todayStr := time.Now().Format("Monday") // "Monday", "Tuesday"...
-			for i, d := range weekDays {
-				// simple case insensitive check or just use the fact they match mostly
-				if d == "monday" && todayWeekday == time.Monday {
-					todayIndex = i
-				} else if d == "tuesday" && todayWeekday == time.Tuesday {
-					todayIndex = i
-				} else if d == "wednesday" && todayWeekday == time.Wednesday {
-					todayIndex = i
-				} else if d == "thursday" && todayWeekday == time.Thursday {
-					todayIndex = i
-				} else if d == "friday" && todayWeekday == time.Friday {
-					todayIndex = i
-				} else if d == "saturday" && todayWeekday == time.Saturday {
-					todayIndex = i
-				} else if d == "sunday" && todayWeekday == time.Sunday {
-					todayIndex = i
-				}
-			}
+			todayIndex := DayIndex(todayWeekday)
 
 			if todayIndex > 0 {
 				slog.Info("Checking past days for backfill", "today_index", todayIndex)
@@ -143,7 +120,7 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 					if scheduledTime > 0 {
 						// Check how much is already done for checkDay
 						// Need to calculate date for that day
-						dateForDay := service.CalculateDateForDay(checkDay)
+						dateForDay := CalculateDateForDay(checkDay)
 						doneTime, err := s.st.GetTaskDurationForDate(taskRecordRequest.TaskName, dateForDay)
 						if err != nil {
 							slog.Error("failed to get task duration for backfill", "day", checkDay, "err", err)
@@ -276,4 +253,20 @@ func (s *TaskRecordService) GetTodayTaskTimeLeft(taskName string) (int, error) {
 	taskTimeLeft := taskParams.Time - timeDuration
 
 	return taskTimeLeft, nil
+}
+
+func (s *TaskRecordService) GetRecords() ([]entity.TaskRecord, error) {
+	return s.st.GetRecords()
+}
+
+func (s *TaskRecordService) CleanRecords() {
+	s.st.CleanRecords()
+}
+
+func (s *TaskRecordService) RotatePlanPercent() error {
+	groupPlan, err := s.st.GetGroupPlanPercent()
+	if err != nil {
+		return err
+	}
+	return s.st.ChangeGroupPlanPercent(groupPlan)
 }

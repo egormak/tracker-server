@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"time"
+	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/storage"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -165,7 +166,7 @@ func (s *Storage) TimeTasks() (int, error) {
 
 	for cursor.Next(s.Context) {
 		// Declare a result BSON object
-		var result storage.TaskRecord
+		var result entity.TaskRecord
 		err := cursor.Decode(&result)
 		if err != nil {
 			return 0, err

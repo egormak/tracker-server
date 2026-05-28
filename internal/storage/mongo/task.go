@@ -11,9 +11,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func (s *Storage) GetRecords() ([]storage.TaskRecord, error) {
+func (s *Storage) GetRecords() ([]entity.TaskRecord, error) {
 
-	var taskRecords []storage.TaskRecord
+	var taskRecords []entity.TaskRecord
 
 	coll := s.Client.Database(dbName).Collection(tasksList)
 	cursor, err := coll.Find(s.Context, bson.D{})
@@ -24,7 +24,7 @@ func (s *Storage) GetRecords() ([]storage.TaskRecord, error) {
 
 	for cursor.Next(s.Context) {
 		// Declare a result BSON object
-		var taskRecord storage.TaskRecord
+		var taskRecord entity.TaskRecord
 		err := cursor.Decode(&taskRecord)
 		if err != nil {
 			return nil, err
@@ -50,10 +50,10 @@ func (s *Storage) CleanRecords() {
 
 }
 
-func (s *Storage) ShowTaskList() ([]storage.TaskResult, error) {
+func (s *Storage) ShowTaskList() ([]entity.TaskResult, error) {
 
 	var taskDefinitions []entity.TaskDefinition
-	var taskResults []storage.TaskResult
+	var taskResults []entity.TaskResult
 	database := s.Client.Database(dbName)
 	coll := database.Collection(taskNamesList)
 
@@ -77,7 +77,7 @@ func (s *Storage) ShowTaskList() ([]storage.TaskResult, error) {
 		if err != nil {
 			return nil, fmt.Errorf("show-task-list: %w", err)
 		}
-		taskResults = append(taskResults, storage.TaskResult{
+		taskResults = append(taskResults, entity.TaskResult{
 			Name:         taskData.Name,
 			Role:         taskData.Role,
 			TimeDuration: taskData.TimeSchedule,
@@ -107,7 +107,7 @@ func (s *Storage) GetTodayTaskDuration(taskName string) (int, error) {
 
 	for cursor_task.Next(s.Context) {
 		// Declare a result BSON object
-		var result storage.TaskRecord
+		var result entity.TaskRecord
 		err := cursor_task.Decode(&result)
 		if err != nil {
 			return 0, fmt.Errorf("get-today-task-duration: %w", err)
@@ -133,7 +133,7 @@ func (s *Storage) GetTaskDurationForDate(taskName string, date string) (int, err
 	defer cursor_task.Close(s.Context)
 
 	for cursor_task.Next(s.Context) {
-		var result storage.TaskRecord
+		var result entity.TaskRecord
 		err := cursor_task.Decode(&result)
 		if err != nil {
 			return 0, fmt.Errorf("get-task-duration-for-date: %w", err)
@@ -211,7 +211,7 @@ func (s *Storage) GetDayTaskRecord(taskName string) (int, error) {
 
 	for cursor.Next(s.Context) {
 		// Declare a result BSON object
-		var result storage.TaskRecord
+		var result entity.TaskRecord
 		err := cursor.Decode(&result)
 		if err != nil {
 			return 0, fmt.Errorf("get-day-task-record: %w", err)
@@ -279,7 +279,7 @@ func (s *Storage) StatisticTaskGet(taskName string) (int, error) {
 
 	for cursor.Next(s.Context) {
 		// Declare a result BSON object
-		var result storage.TaskRecord
+		var result entity.TaskRecord
 		err := cursor.Decode(&result)
 		if err != nil {
 			return 0, err

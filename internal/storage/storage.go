@@ -4,11 +4,11 @@ import "tracker-server/internal/domain/entity"
 
 type Storage interface {
 	RestSpend(restTime int) error
-	GetRecords() ([]TaskRecord, error)
+	GetRecords() ([]entity.TaskRecord, error)
 	GetDayTaskRecord(taskName string) (int, error)
-	StatisticRolesGet() ([]RoleRecord, error)
-	StatisticRolesGetToday() ([]RoleRecord, error)
-	ShowTaskList() ([]TaskResult, error)
+	StatisticRolesGet() ([]entity.RoleRecord, error)
+	StatisticRolesGetToday() ([]entity.RoleRecord, error)
+	ShowTaskList() ([]entity.TaskResult, error)
 	SetTaskParams(params entity.TaskParams) error
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	RecheckRole() error
@@ -24,8 +24,8 @@ type Storage interface {
 	GetRole(taskName string) (string, error)
 	AddRest(restTime int) error
 	GetRest() (int, error)
-	ProcentsSet(procentM Procents) error
-	GetPlanProcents() (Procents, error)
+	ProcentsSet(procentM entity.PlanPercents) error
+	GetPlanProcents() (entity.PlanPercents, error)
 	GetGroupPlanPercent() (int, error)
 	ChangeGroupPlanPercent(groupPlan int) error
 	GetGroupPercent(groupPlan int) (int, error)

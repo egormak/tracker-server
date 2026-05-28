@@ -25,7 +25,7 @@ type ManageStorage interface {
 	CreateTask(taskDefinition entity.TaskDefinition) error
 
 	// GetPlanProcents retrieves the plan percents configuration
-	GetPlanProcents() (storage.Procents, error)
+	GetPlanProcents() (entity.PlanPercents, error)
 
 	// RemovePlanPercent removes a specific percent value from the given group
 	RemovePlanPercent(group string, value int) error
@@ -79,18 +79,7 @@ func (m *ManageService) GetPlanPercents() (*entity.PlanPercents, error) {
 		return nil, fmt.Errorf("failed to get plan percents: %w", err)
 	}
 
-	result := &entity.PlanPercents{
-		Title:         procents.Title,
-		Date:          procents.Date,
-		CurrentChoice: procents.CurrentChoice,
-		Plans:         procents.Plans,
-		Plan:          procents.Plan,
-		Work:          procents.Work,
-		Learn:         procents.Learn,
-		Rest:          procents.Rest,
-	}
-
-	return result, nil
+	return &procents, nil
 }
 
 var planPercentGroups = map[string]struct{}{

@@ -26,10 +26,10 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	runningTaskService := services.NewRunningTaskService(mongoconn)
 
 	// Handlers
-	// Task (with storage access for legacy endpoints)
-	taskHandler := handler.NewTaskHandlerWithStorage(taskService, mongoconn)
-	// TaskRecords (with storage access for legacy plan percent rotation)
-	taskRecordHandler := handler.NewTaskRecordHandlerWithStorage(taskRecordService, scheduleService, mongoconn)
+	// Task
+	taskHandler := handler.NewTaskHandler(taskService)
+	// TaskRecords
+	taskRecordHandler := handler.NewTaskRecordHandler(taskRecordService, scheduleService)
 	// Rest
 	restHandler := handler.NewRestHandler(restService)
 	// Statistics

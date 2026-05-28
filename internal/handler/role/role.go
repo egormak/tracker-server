@@ -3,7 +3,7 @@ package role
 import (
 	"time"
 	"tracker-server/internal/notify"
-	"tracker-server/internal/service"
+	"tracker-server/internal/services"
 	"tracker-server/internal/storage"
 
 	log "github.com/sirupsen/logrus"
@@ -58,7 +58,7 @@ func (r *Role) StatCompletionTimeDone(c *fiber.Ctx) error {
 	// Count Time Done
 	for _, roleData := range rolesData {
 		if roleData.RecordDate == time.Now().Format("2 January 2006") {
-			if service.IsWeekendNow() || roleData.Name != "rest" {
+			if services.IsWeekendNow() || roleData.Name != "rest" {
 				timeDone += roleData.DurationToday
 			}
 		}

@@ -3,7 +3,8 @@ package mongo
 import (
 	"fmt"
 	"time"
-	"tracker-server/internal/service"
+	"tracker-server/internal/domain/entity"
+	"tracker-server/internal/services"
 	"tracker-server/internal/storage"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -11,7 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func (s *Storage) ProcentsSet(procentM storage.Procents) error {
+func (s *Storage) ProcentsSet(procentM entity.PlanPercents) error {
 
 	planProcentDate, err := s.getDatePlanPercent()
 	if err != nil {
@@ -21,7 +22,7 @@ func (s *Storage) ProcentsSet(procentM storage.Procents) error {
 	}
 
 	if planProcentDate != time.Now().Format("2 January 2006") || planProcentDate == "" {
-		if service.IsWeekendNow() {
+		if services.IsWeekendNow() {
 			procentM.Plans = PlanTypesWeekEndsDays
 			fmt.Println("Plans Weekends: ", procentM.Plans)
 		} else {
@@ -58,7 +59,7 @@ func (s *Storage) GetGroupPlanPercent() (int, error) {
 	coll := database.Collection(taskInfo)
 
 	// Find the document
-	var procentM storage.Procents
+	var procentM entity.PlanPercents
 	err := coll.FindOne(s.Context, bson.M{"title": procentDocName}).Decode(&procentM)
 	if err != nil {
 		// Return an error if there was a problem finding the document
@@ -69,20 +70,20 @@ func (s *Storage) GetGroupPlanPercent() (int, error) {
 
 }
 
-func (s *Storage) GetPlanProcents() (storage.Procents, error) {
+func (s *Storage) GetPlanProcents() (entity.PlanPercents, error) {
 	// Connect to the database
 	database := s.Client.Database(dbName)
 	coll := database.Collection(taskInfo)
 
 	// Find the document
-	var procentM storage.Procents
+	var procentM entity.PlanPercents
 	err := coll.FindOne(s.Context, bson.M{"title": procentDocName}).Decode(&procentM)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return storage.Procents{}, storage.ErrListEmpty
+			return entity.PlanPercents{}, storage.ErrListEmpty
 		}
 		// Return an error if there was a problem finding the document
-		return storage.Procents{}, fmt.Errorf("get-plan-procents error in findone: %s", err)
+		return entity.PlanPercents{}, fmt.Errorf("get-plan-procents error in findone: %s", err)
 	}
 
 	return procentM, nil
@@ -93,7 +94,7 @@ func (s *Storage) ChangeGroupPlanPercent(groupPlane int) error {
 	database := s.Client.Database(dbName)
 	coll := database.Collection(taskInfo)
 
-	var procentM storage.Procents
+	var procentM entity.PlanPercents
 	err := coll.FindOne(s.Context, bson.M{"title": procentDocName}).Decode(&procentM)
 	if err != nil {
 		// Return an error if there was a problem finding the document
@@ -126,7 +127,7 @@ func (s *Storage) GetGroupPercent(groupPlan int) (int, error) {
 	coll := database.Collection(taskInfo)
 
 	// Find the document
-	var procentM storage.Procents
+	var procentM entity.PlanPercents
 	err := coll.FindOne(s.Context, bson.M{"title": procentDocName}).Decode(&procentM)
 	if err != nil {
 		// Return an error if there was a problem finding the document
@@ -228,7 +229,7 @@ func (s *Storage) GetGroupName(groupNameOrdinal int) (string, error) {
 	database := s.Client.Database(dbName)
 	coll := database.Collection(taskInfo)
 
-	var procentM storage.Procents
+	var procentM entity.PlanPercents
 	err := coll.FindOne(s.Context, bson.M{"title": procentDocName}).Decode(&procentM)
 	if err != nil {
 		// Return an error if there was a problem finding the document
@@ -243,7 +244,7 @@ func (s *Storage) getDatePlanPercent() (string, error) {
 	database := s.Client.Database(dbName)
 	coll := database.Collection(taskInfo)
 
-	var procentM storage.Procents
+	var procentM entity.PlanPercents
 	err := coll.FindOne(s.Context, bson.M{"title": procentDocName}).Decode(&procentM)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -262,7 +263,7 @@ func (s *Storage) CheckIfPlanPercentEmpty() error {
 	database := s.Client.Database(dbName)
 	coll := database.Collection(taskInfo)
 
-	var procentM storage.Procents
+	var procentM entity.PlanPercents
 	err := coll.FindOne(s.Context, bson.M{"title": procentDocName}).Decode(&procentM)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {

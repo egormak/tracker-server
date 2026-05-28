@@ -1304,6 +1304,7 @@ paths:
 
   /api/v1/manage/procents:
     get:
+      deprecated: true
       tags:
         - Management
       summary: Get plan percents configuration (legacy)
@@ -1323,6 +1324,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
     post:
+      deprecated: true
       tags:
         - Management
       summary: Set plan percents per role

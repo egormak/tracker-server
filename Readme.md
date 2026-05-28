@@ -25,7 +25,8 @@ docker run -d \
 - `cmd/server/main.go` – Application entrypoint
 - `internal/api/handler` – HTTP handlers (Fiber)
 - `internal/api/routes/routes.go` – API route definitions
-- `internal/services/` – Business logic layer
+- `internal/domain/entity/` – Domain model/entity definitions
+- `internal/services/` – Business logic layer (unifying logic and helpers)
 - `internal/storage/mongo/` – MongoDB persistence adapters
 - `config/config.go` – Configuration loader
 - `openapi.yml` – API contract (Swagger/OpenAPI)

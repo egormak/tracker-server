@@ -7,7 +7,6 @@ import (
 	"time"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/services"
-	"tracker-server/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -18,37 +17,21 @@ type scheduleService interface {
 
 type taskRecordService interface {
 	AddRecord(body entity.TaskRecordRequest) error
-	// GetTasksNext() (entity.TasksNextResponse, error)
 	GetTaskPlanPercent() (entity.PlanPercentResponse, error)
 	GetTaskPlanPercentWithSchedule(scheduleService services.ScheduleServiceProvider) (entity.PlanPercentResponse, error)
 	GetTaskByNameSchedule(taskName string, scheduleService services.ScheduleServiceProvider) (entity.PlanPercentResponse, error)
-}
-
-type planPercentStorage interface {
-	GetGroupPlanPercent() (int, error)
-	ChangeGroupPlanPercent(groupPlan int) error
-	GetRecords() ([]storage.TaskRecord, error)
+	GetRecords() ([]entity.TaskRecord, error)
 	CleanRecords()
+	RotatePlanPercent() error
 }
 
 type TaskRecordHandler struct {
 	srv             taskRecordService
 	scheduleService scheduleService
-	st              planPercentStorage
 }
 
-func NewTaskRecordHandler(srv taskRecordService) *TaskRecordHandler {
-	return &TaskRecordHandler{srv: srv, scheduleService: nil, st: nil}
-}
-
-// NewTaskRecordHandlerWithSchedule creates handler with schedule integration
-func NewTaskRecordHandlerWithSchedule(srv taskRecordService, scheduleSrv scheduleService) *TaskRecordHandler {
-	return &TaskRecordHandler{srv: srv, scheduleService: scheduleSrv, st: nil}
-}
-
-// NewTaskRecordHandlerWithStorage creates handler with direct storage access for legacy endpoints
-func NewTaskRecordHandlerWithStorage(srv taskRecordService, scheduleSrv scheduleService, st planPercentStorage) *TaskRecordHandler {
-	return &TaskRecordHandler{srv: srv, scheduleService: scheduleSrv, st: st}
+func NewTaskRecordHandler(srv taskRecordService, scheduleSrv scheduleService) *TaskRecordHandler {
+	return &TaskRecordHandler{srv: srv, scheduleService: scheduleSrv}
 }
 
 func (t *TaskRecordHandler) AddRecord(c *fiber.Ctx) error {
@@ -117,9 +100,6 @@ func (t *TaskRecordHandler) GetTaskPlanPercent(c *fiber.Ctx) error {
 	answer, err := t.srv.GetTaskPlanPercent()
 	if err != nil {
 		statusCode := 500
-		if err == storage.ErrAllEmpty {
-			statusCode = 404
-		}
 		slog.Error("Error getting task plan percent", "err", err)
 		return c.Status(statusCode).JSON(&fiber.Map{
 			"status":  "error",
@@ -153,9 +133,6 @@ func (t *TaskRecordHandler) GetTaskPlanPercentWithSchedule(c *fiber.Ctx) error {
 	answer, err := t.srv.GetTaskPlanPercentWithSchedule(t.scheduleService)
 	if err != nil {
 		statusCode := 500
-		if err == storage.ErrAllEmpty {
-			statusCode = 404
-		}
 		slog.Error("Error getting task plan percent with schedule", "err", err)
 		return c.Status(statusCode).JSON(&fiber.Map{
 			"status":  "error",
@@ -213,24 +190,7 @@ func (t *TaskRecordHandler) GetTaskByNameSchedule(c *fiber.Ctx) error {
 func (t *TaskRecordHandler) ChangeGroupPlanPercent(c *fiber.Ctx) error {
 	slog.Info("Get request ChangeGroupPlanPercent")
 
-	if t.st == nil {
-		slog.Error("Storage not initialized for ChangeGroupPlanPercent")
-		return c.Status(500).JSON(&fiber.Map{
-			"status":  "error",
-			"message": "Internal configuration error",
-		})
-	}
-
-	groupPlan, err := t.st.GetGroupPlanPercent()
-	if err != nil {
-		slog.Error("Failed to get group plan percent", "err", err)
-		return c.Status(500).JSON(&fiber.Map{
-			"status":  "error",
-			"message": err.Error(),
-		})
-	}
-
-	if err := t.st.ChangeGroupPlanPercent(groupPlan); err != nil {
+	if err := t.srv.RotatePlanPercent(); err != nil {
 		slog.Error("Failed to change group plan percent", "err", err)
 		return c.Status(500).JSON(&fiber.Map{
 			"status":  "error",
@@ -246,19 +206,12 @@ func (t *TaskRecordHandler) ChangeGroupPlanPercent(c *fiber.Ctx) error {
 
 // ShowRecords returns a JSON response with task records for today, yesterday, and all time (legacy endpoint for web UI)
 func (t *TaskRecordHandler) ShowRecords(c *fiber.Ctx) error {
-	if t.st == nil {
-		return c.Status(500).JSON(&fiber.Map{
-			"status":  "error",
-			"message": "Internal configuration error",
-		})
-	}
-
 	// Get today's and yesterday's dates in the required format
 	today := time.Now().Format("2 January 2006")
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2 January 2006")
 
-	// Retrieve task records from the storage
-	records, err := t.st.GetRecords()
+	// Retrieve task records from the service
+	records, err := t.srv.GetRecords()
 	if err != nil {
 		return c.Status(500).JSON(&fiber.Map{
 			"status":  "error",
@@ -293,15 +246,8 @@ func (t *TaskRecordHandler) ShowRecords(c *fiber.Ctx) error {
 
 // CleanRecords cleans all records (dev endpoint)
 func (t *TaskRecordHandler) CleanRecords(c *fiber.Ctx) error {
-	if t.st == nil {
-		return c.Status(500).JSON(&fiber.Map{
-			"status":  "error",
-			"message": "Internal configuration error",
-		})
-	}
-
 	slog.Info("Start Clean Data")
-	t.st.CleanRecords()
+	t.srv.CleanRecords()
 	slog.Info("Finish Data Clean")
 
 	return c.Status(200).JSON(&fiber.Map{

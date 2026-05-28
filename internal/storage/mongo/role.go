@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 	"tracker-server/internal/domain/entity"
-	"tracker-server/internal/storage"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -12,7 +11,7 @@ import (
 
 // StatisticRolesGet retrieves the role statistics from the storage.
 // It returns a slice of RoleRecord structs and an error if any.
-func (s *Storage) StatisticRolesGet() ([]storage.RoleRecord, error) {
+func (s *Storage) StatisticRolesGet() ([]entity.RoleRecord, error) {
 	// Get the database and collection
 	database := s.Client.Database(dbName)
 	coll_role_stat := database.Collection(roleInfo)
@@ -25,7 +24,7 @@ func (s *Storage) StatisticRolesGet() ([]storage.RoleRecord, error) {
 	defer cursor_roles.Close(s.Context)
 
 	// Retrieve all role records in a single operation
-	var resultData []storage.RoleRecord
+	var resultData []entity.RoleRecord
 	if err := cursor_roles.All(s.Context, &resultData); err != nil {
 		return nil, err
 	}
@@ -33,7 +32,7 @@ func (s *Storage) StatisticRolesGet() ([]storage.RoleRecord, error) {
 	return resultData, nil
 }
 
-func (s *Storage) StatisticRolesGetToday() ([]storage.RoleRecord, error) {
+func (s *Storage) StatisticRolesGetToday() ([]entity.RoleRecord, error) {
 	// Get the database and collection
 	database := s.Client.Database(dbName)
 	coll := database.Collection(roleInfo)
@@ -45,7 +44,7 @@ func (s *Storage) StatisticRolesGetToday() ([]storage.RoleRecord, error) {
 	}
 	defer cursor.Close(s.Context)
 
-	var resultData []storage.RoleRecord
+	var resultData []entity.RoleRecord
 	if err := cursor.All(s.Context, &resultData); err != nil {
 		return nil, err
 	}
@@ -86,11 +85,10 @@ func (s *Storage) RecheckRole() error {
 
 func (s *Storage) AddRoleMinutes(t entity.TaskRecord) error {
 	// Set Value for DB
-	// client := dbClient.Client
-	// ctx := dbClient.Context
+	// today := time.Now().Format("2 January 2006")
 	today := time.Now().Format("2 January 2006")
 
-	var result storage.RoleRecord
+	var result entity.RoleRecord
 
 	// Check if the role is correct
 	if err := CorrectRoleCheck(t.Role); err != nil {
@@ -106,7 +104,7 @@ func (s *Storage) AddRoleMinutes(t entity.TaskRecord) error {
 	if err != nil {
 		// If the role doesn't exist, insert a new record for it
 		if err == mongo.ErrNoDocuments {
-			result = storage.RoleRecord{Name: t.Role, Duration: t.TimeDuration, RecordDate: t.Date, DurationToday: t.TimeDuration}
+			result = entity.RoleRecord{Name: t.Role, Duration: t.TimeDuration, RecordDate: t.Date, DurationToday: t.TimeDuration}
 			coll.InsertOne(s.Context, result)
 			return nil
 		} else {

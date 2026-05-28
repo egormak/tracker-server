@@ -2,11 +2,10 @@ package services
 
 import (
 	"tracker-server/internal/domain/entity"
-	"tracker-server/internal/storage"
 )
 
 type StatisticStorage interface {
-	ShowTaskList() ([]storage.TaskResult, error)
+	ShowTaskList() ([]entity.TaskResult, error)
 }
 
 type StatisticService struct {
@@ -23,15 +22,5 @@ func (s *StatisticService) GetTaskRecordToday() ([]entity.TaskResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]entity.TaskResult, 0, len(list))
-	for _, t := range list {
-		out = append(out, entity.TaskResult{
-			Name:         t.Name,
-			Role:         t.Role,
-			TimeDuration: t.TimeDuration,
-			TimeDone:     t.TimeDone,
-			Priority:     t.Priority,
-		})
-	}
-	return out, nil
+	return list, nil
 }

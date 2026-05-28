@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 	"tracker-server/internal/domain/entity"
-	"tracker-server/internal/service"
 )
 
 type MockTaskRecordStorage struct {
@@ -65,6 +64,12 @@ func (m *MockTaskRecordStorage) GetActiveSchedule() (entity.WeeklySchedule, erro
 func (m *MockTaskRecordStorage) GetTaskDurationForDate(taskName string, date string) (int, error) {
 	return 0, nil
 }
+func (m *MockTaskRecordStorage) GetRecords() ([]entity.TaskRecord, error) {
+	return m.Records, nil
+}
+func (m *MockTaskRecordStorage) CleanRecords() {
+	m.Records = nil
+}
 
 func TestBackfillLogic(t *testing.T) {
 	// Only run if today is NOT Monday, otherwise backfill from Monday won't work
@@ -98,7 +103,7 @@ func TestBackfillLogic(t *testing.T) {
 	foundMonday := false
 	foundToday := false
 
-	mondayDate := service.CalculateDateForDay("monday")
+	mondayDate := CalculateDateForDay("monday")
 	todayDate := time.Now().Format("2 January 2006")
 
 	for _, r := range mockStorage.Records {
