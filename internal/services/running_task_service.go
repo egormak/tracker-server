@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 	"tracker-server/internal/domain/entity"
+	"tracker-server/internal/notify"
 )
 
 type RunningTaskStorage interface {
@@ -14,14 +15,16 @@ type RunningTaskStorage interface {
 	AddTaskRecord(task entity.TaskRecord) error
 	AddRoleMinutes(task entity.TaskRecord) error
 	AddRest(restTime int) error
+	TimeListDelDB(timeDuretion int) error
 }
 
 type RunningTaskService struct {
 	st RunningTaskStorage
+	nt notify.Notify
 }
 
-func NewRunningTaskService(st RunningTaskStorage) *RunningTaskService {
-	return &RunningTaskService{st: st}
+func NewRunningTaskService(st RunningTaskStorage, nt notify.Notify) *RunningTaskService {
+	return &RunningTaskService{st: st, nt: nt}
 }
 
 func (s *RunningTaskService) Start(taskName string, role string, targetDuration int, sourceDay string) (entity.RunningTask, error) {
@@ -51,6 +54,12 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 		IsRunning:      true,
 		TargetDuration: targetDuration,
 		SourceDay:      sourceDay,
+	}
+
+	if s.nt != nil {
+		if msgID, err := s.nt.SendMessageStart(taskName); err == nil {
+			task.TelegramMessageID = msgID
+		}
 	}
 
 	if err := s.st.UpsertRunningTask(task); err != nil {
@@ -99,6 +108,17 @@ func (s *RunningTaskService) Stop() (entity.TaskRecord, error) {
 	}
 	if err := s.st.AddRest(record.TimeDuration); err != nil {
 		fmt.Printf("failed to add rest: %v\n", err)
+	}
+
+	// Trigger Telegram notifications if active msg_id exists
+	if s.nt != nil && task.TelegramMessageID != 0 {
+		timeEnd := time.Now().Format("2 January 2006 15:04")
+		_ = s.nt.SendMessageStop(task.TaskName, record.TimeDuration, task.TelegramMessageID, timeEnd)
+	}
+
+	// Delete from active plan/timers if task completed
+	if task.TargetDuration > 0 && record.TimeDuration >= task.TargetDuration {
+		_ = s.st.TimeListDelDB(task.TargetDuration)
 	}
 
 	// Delete running task
