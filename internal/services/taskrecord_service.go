@@ -148,6 +148,7 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 									Role:         taskRole,
 									TimeDuration: fillAmount,
 									Date:         dateForDay,
+									SourceDay:    checkDay,
 								}
 								if err := s.st.AddTaskRecord(pastRecord); err != nil {
 									slog.Error("failed to add backfill record", "err", err)
@@ -193,6 +194,7 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 		Role:         taskRole,
 		TimeDuration: taskRecordRequest.TimeDone,
 		Date:         recordDate,
+		SourceDay:    taskRecordRequest.SourceDay,
 	}
 
 	slog.Info("Creating task record",
