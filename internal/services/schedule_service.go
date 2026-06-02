@@ -41,7 +41,7 @@ type ScheduleStorage interface {
 
 	// Task operations needed for rollover calculations
 	GetTodayTaskDuration(taskName string) (int, error)
-	GetTaskDurationForDate(taskName string, date string) (int, error)
+	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	CreateTask(taskDefinition entity.TaskDefinition) error
 	GetTaskNamesForDate(date string) ([]string, error)
@@ -228,7 +228,7 @@ func (s *ScheduleService) buildTaskDayDeficits(schedule entity.WeeklySchedule, p
 		// For each task scheduled on this day
 		for _, task := range daySchedule.Tasks {
 			// Get actual work done on this specific day
-			timeDone, err := s.st.GetTaskDurationForDate(task.Name, dayDate)
+			timeDone, err := s.st.GetTaskDurationForDate(task.Name, dayDate, day)
 			if err != nil {
 				timeDone = 0
 			}

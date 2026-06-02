@@ -35,7 +35,7 @@ type Storage interface {
 	CheckIfPlanPercentEmpty() error
 	GetGroupName(groupNameOrdinal int) (string, error)
 	GetTodayTaskDuration(taskName string) (int, error)
-	GetTaskDurationForDate(taskName string, date string) (int, error)
+	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
 	// GetTaskRecordToday(opts ...TaskRecordOption) ([]TaskRecord, error)
 	// WithCheckBusinessDay(check bool) TaskRecordOption
 	CreateTask(task entity.TaskDefinition) error

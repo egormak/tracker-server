@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"fmt"
+	"strings"
 	"time"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/storage"
@@ -118,15 +119,26 @@ func (s *Storage) GetTodayTaskDuration(taskName string) (int, error) {
 
 }
 
-// GetTaskDurationForDate gets the total duration for a task on a specific date
-func (s *Storage) GetTaskDurationForDate(taskName string, date string) (int, error) {
+// GetTaskDurationForDate gets the total duration for a task on a specific date and source day
+func (s *Storage) GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error) {
 	var timeDuration int
 
 	database := s.Client.Database(dbName)
 	coll := database.Collection(tasksList)
 
-	// Get Information about tasks for the specific date
-	cursor_task, err := coll.Find(s.Context, bson.M{"name": taskName, "date": date})
+	// Query for records that belong to this date/day:
+	// - either source_day matches the rollover source day (if sourceDay is set)
+	// - or date matches and source_day is empty/nil (not rolled over)
+	filter := bson.M{
+		"name": taskName,
+		"$or": []bson.M{
+			{"source_day": strings.ToLower(sourceDay)},
+			{"date": date, "source_day": bson.M{"$in": []interface{}{"", nil}}},
+		},
+	}
+
+	// Get Information about tasks for the specific date/day
+	cursor_task, err := coll.Find(s.Context, filter)
 	if err != nil {
 		return 0, fmt.Errorf("get-task-duration-for-date: %w", err)
 	}

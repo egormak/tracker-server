@@ -22,7 +22,7 @@ type TaskRecordStorage interface {
 	GetTodayTaskDuration(taskName string) (int, error)
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	GetActiveSchedule() (entity.WeeklySchedule, error)
-	GetTaskDurationForDate(taskName string, date string) (int, error)
+	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
 	GetRecords() ([]entity.TaskRecord, error)
 	CleanRecords()
 }
@@ -121,7 +121,7 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 						// Check how much is already done for checkDay
 						// Need to calculate date for that day
 						dateForDay := CalculateDateForDay(checkDay)
-						doneTime, err := s.st.GetTaskDurationForDate(taskRecordRequest.TaskName, dateForDay)
+						doneTime, err := s.st.GetTaskDurationForDate(taskRecordRequest.TaskName, dateForDay, checkDay)
 						if err != nil {
 							slog.Error("failed to get task duration for backfill", "day", checkDay, "err", err)
 							continue

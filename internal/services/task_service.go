@@ -10,7 +10,7 @@ import (
 type TaskStorage interface {
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	GetActiveSchedule() (entity.WeeklySchedule, error)
-	GetTaskDurationForDate(taskName string, date string) (int, error)
+	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
 	GetDayTaskRecord(taskName string) (int, error)
 }
 

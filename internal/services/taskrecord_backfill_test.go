@@ -61,7 +61,7 @@ func (m *MockTaskRecordStorage) GetActiveSchedule() (entity.WeeklySchedule, erro
 		},
 	}, nil
 }
-func (m *MockTaskRecordStorage) GetTaskDurationForDate(taskName string, date string) (int, error) {
+func (m *MockTaskRecordStorage) GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error) {
 	return 0, nil
 }
 func (m *MockTaskRecordStorage) GetRecords() ([]entity.TaskRecord, error) {
