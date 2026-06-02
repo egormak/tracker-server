@@ -88,11 +88,16 @@ func (s *RunningTaskService) Stop() (entity.TaskRecord, error) {
 		duration = 1
 	}
 
+	recordDate := time.Now().Format("2 January 2006")
+	if task.SourceDay != "" {
+		recordDate = CalculateDateForDay(task.SourceDay)
+	}
+
 	record := entity.TaskRecord{
 		Name:         task.TaskName,
 		Role:         task.Role,
 		TimeDuration: duration,
-		Date:         time.Now().Format("2 January 2006"),
+		Date:         recordDate,
 		SourceDay:    task.SourceDay, // Apply the source day when stopping
 	}
 
