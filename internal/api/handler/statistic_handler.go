@@ -9,6 +9,7 @@ import (
 
 type StatisticService interface {
 	GetTaskRecordToday() ([]entity.TaskResult, error)
+	GetWeeklyStats() (entity.WeeklyStatsResponse, error)
 }
 
 type StatisticHandler struct {
@@ -17,6 +18,22 @@ type StatisticHandler struct {
 
 func NewStatisticHandler(srv StatisticService) *StatisticHandler {
 	return &StatisticHandler{srv: srv}
+}
+
+// GetWeeklyStats returns task completion metrics and targets for the current week
+func (s *StatisticHandler) GetWeeklyStats(c *fiber.Ctx) error {
+	slog.Info("Get request GetWeeklyStats")
+
+	statsData, err := s.srv.GetWeeklyStats()
+	if err != nil {
+		slog.Error("Failed to get weekly stats", "err", err)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(200).JSON(statsData)
 }
 
 // TODO: Finish this function

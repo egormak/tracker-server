@@ -79,6 +79,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone) // TODO Remove in future
 	// Alias for dashboard tasks list (today planned vs done)
 	api.Get("/v1/stats/tasks/today", statsHandler.StatCompletionTimeDone)
+	api.Get("/v1/stats/weekly", statsHandler.GetWeeklyStats)
 	api.Get("/v1/tasklist", statsHandler.ShowTaskList) // Legacy endpoint for CLI and web UI
 
 	// Plan Percents

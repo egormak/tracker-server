@@ -44,3 +44,33 @@ type PlanPercentResponse struct {
 	TimeLeft  int    `json:"time_left"`
 	SourceDay string `json:"source_day,omitempty"` // Optional: which day this task is from (for rollover tasks)
 }
+
+type WeeklyStatsDay struct {
+	Day       string         `json:"day"`
+	Date      string         `json:"date"`
+	TotalDone int            `json:"total_done"`
+	Roles     map[string]int `json:"roles"`
+	Tasks     []TaskResult   `json:"tasks"`
+}
+
+type WeeklyTarget struct {
+	Role         string `json:"role"`
+	TimeDuration int    `json:"time_duration"`
+	TimeDone     int    `json:"time_done"`
+}
+
+type WeeklyTaskTarget struct {
+	Name         string `json:"name"`
+	Role         string `json:"role"`
+	TimeDuration int    `json:"time_duration"`
+	TimeDone     int    `json:"time_done"`
+}
+
+type WeeklyStatsResponse struct {
+	WeekStartDate string             `json:"week_start_date"`
+	WeekEndDate   string             `json:"week_end_date"`
+	Days          []WeeklyStatsDay   `json:"days"`
+	WeeklyTargets []WeeklyTarget     `json:"weekly_targets"`
+	WeeklyTasks   []WeeklyTaskTarget `json:"weekly_tasks"`
+}
+

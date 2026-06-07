@@ -93,6 +93,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/stats/weekly:
+    get:
+      tags:
+        - Statistics
+      summary: Get weekly task statistics
+      description: Get aggregated task and role metrics for the current calendar week (Monday to Sunday)
+      operationId: getWeeklyStats
+      responses:
+        '200':
+          description: Successfully retrieved weekly statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyStatsResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/task/params:
     get:
       tags:
@@ -2080,3 +2101,85 @@ components:
         - tasks
         - rollover_tasks
         - plan_group
+
+    WeeklyStatsDay:
+      type: object
+      properties:
+        day:
+          type: string
+        date:
+          type: string
+        total_done:
+          type: integer
+        roles:
+          type: object
+          additionalProperties:
+            type: integer
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskResult"
+      required:
+        - day
+        - date
+        - total_done
+        - roles
+        - tasks
+
+    WeeklyTarget:
+      type: object
+      properties:
+        role:
+          type: string
+        time_duration:
+          type: integer
+        time_done:
+          type: integer
+      required:
+        - role
+        - time_duration
+        - time_done
+
+    WeeklyTaskTarget:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+        time_duration:
+          type: integer
+        time_done:
+          type: integer
+      required:
+        - name
+        - role
+        - time_duration
+        - time_done
+
+    WeeklyStatsResponse:
+      type: object
+      properties:
+        week_start_date:
+          type: string
+        week_end_date:
+          type: string
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyStatsDay"
+        weekly_targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyTarget"
+        weekly_tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyTaskTarget"
+      required:
+        - week_start_date
+        - week_end_date
+        - days
+        - weekly_targets
+        - weekly_tasks
+
