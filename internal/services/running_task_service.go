@@ -2,15 +2,18 @@ package services
 
 import (
 	"fmt"
+	"sync"
 	"time"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/notify"
 )
 
 type RunningTaskStorage interface {
-	GetRunningTask() (entity.RunningTask, error)
+	GetRunningTask(taskName string) (entity.RunningTask, error)
+	GetActiveRunningTask() (entity.RunningTask, error)
+	GetAllRunningTasks() ([]entity.RunningTask, error)
 	UpsertRunningTask(task entity.RunningTask) error
-	DeleteRunningTask() error
+	DeleteRunningTask(taskName string) error
 	GetRole(taskName string) (string, error)
 	AddTaskRecord(task entity.TaskRecord) error
 	AddRoleMinutes(task entity.TaskRecord) error
@@ -21,6 +24,7 @@ type RunningTaskStorage interface {
 type RunningTaskService struct {
 	st RunningTaskStorage
 	nt notify.Notify
+	mu sync.Mutex
 }
 
 func NewRunningTaskService(st RunningTaskStorage, nt notify.Notify) *RunningTaskService {
@@ -28,22 +32,45 @@ func NewRunningTaskService(st RunningTaskStorage, nt notify.Notify) *RunningTask
 }
 
 func (s *RunningTaskService) Start(taskName string, role string, targetDuration int, sourceDay string) (entity.RunningTask, error) {
-	// Check if already running
-	existing, err := s.st.GetRunningTask()
-	if err == nil && existing.IsRunning {
-		// Stop existing first? Or just error?
-		// Let's implicitly stop and save the previous one to be user friendly, or just error.
-		// For simplicity, let's error and tell user to stop previous task.
-		return entity.RunningTask{}, fmt.Errorf("task '%s' is already running", existing.TaskName)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if this task already exists
+	existing, err := s.st.GetRunningTask(taskName)
+	if err == nil && existing.TaskName != "" {
+		if existing.IsRunning {
+			return existing, nil // Already running
+		}
+		// Resume paused task
+		// First, pause any other currently running task
+		active, errActive := s.st.GetActiveRunningTask()
+		if errActive == nil && active.TaskName != "" && active.TaskName != taskName {
+			active.Accumulated += int(time.Since(active.StartTime).Minutes())
+			active.IsRunning = false
+			_ = s.st.UpsertRunningTask(active)
+		}
+		existing.StartTime = time.Now()
+		existing.IsRunning = true
+		if err := s.st.UpsertRunningTask(existing); err != nil {
+			return entity.RunningTask{}, err
+		}
+		return existing, nil
+	}
+
+	// Starting a new task. Pause any currently active running task first.
+	active, errActive := s.st.GetActiveRunningTask()
+	if errActive == nil && active.TaskName != "" {
+		active.Accumulated += int(time.Since(active.StartTime).Minutes())
+		active.IsRunning = false
+		_ = s.st.UpsertRunningTask(active)
 	}
 
 	if role == "" {
-		// Try to lookup role
 		r, err := s.st.GetRole(taskName)
 		if err == nil && r != "" {
 			role = r
 		} else {
-			role = "work" // Default fallback
+			role = "work"
 		}
 	}
 
@@ -68,12 +95,26 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 	return task, nil
 }
 
-func (s *RunningTaskService) Stop() (entity.TaskRecord, error) {
-	task, err := s.st.GetRunningTask()
-	if err != nil {
-		return entity.TaskRecord{}, err
+func (s *RunningTaskService) Stop(taskName string) (entity.TaskRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var task entity.RunningTask
+	var err error
+
+	if taskName != "" {
+		task, err = s.st.GetRunningTask(taskName)
+	} else {
+		task, err = s.st.GetActiveRunningTask()
+		if err != nil || task.TaskName == "" {
+			tasks, errAll := s.st.GetAllRunningTasks()
+			if errAll == nil && len(tasks) > 0 {
+				task = tasks[0]
+			}
+		}
 	}
-	if task.TaskName == "" {
+
+	if err != nil || task.TaskName == "" {
 		return entity.TaskRecord{}, fmt.Errorf("no running task found")
 	}
 
@@ -83,7 +124,6 @@ func (s *RunningTaskService) Stop() (entity.TaskRecord, error) {
 		duration += int(time.Since(task.StartTime).Minutes())
 	}
 
-	// Minimum 1 minute if it was running for less
 	if duration == 0 && task.IsRunning {
 		duration = 1
 	}
@@ -98,47 +138,53 @@ func (s *RunningTaskService) Stop() (entity.TaskRecord, error) {
 		Role:         task.Role,
 		TimeDuration: duration,
 		Date:         recordDate,
-		SourceDay:    task.SourceDay, // Apply the source day when stopping
+		SourceDay:    task.SourceDay,
 	}
 
-	// Save Record
 	if err := s.st.AddTaskRecord(record); err != nil {
 		return entity.TaskRecord{}, fmt.Errorf("failed to save task record: %w", err)
 	}
 
-	// Side effects (roles, rest) - similar to AddRecord
 	if err := s.st.AddRoleMinutes(record); err != nil {
-		// Log error but don't fail the whole stop operation
 		fmt.Printf("failed to add role minutes: %v\n", err)
 	}
 	if err := s.st.AddRest(record.TimeDuration); err != nil {
 		fmt.Printf("failed to add rest: %v\n", err)
 	}
 
-	// Trigger Telegram notifications if active msg_id exists
 	if s.nt != nil && task.TelegramMessageID != 0 {
 		timeEnd := time.Now().Format("2 January 2006 15:04")
 		_ = s.nt.SendMessageStop(task.TaskName, record.TimeDuration, task.TelegramMessageID, timeEnd)
 	}
 
-	// Delete from active plan/timers if task completed
 	if task.TargetDuration > 0 && record.TimeDuration >= task.TargetDuration {
 		_ = s.st.TimeListDelDB(task.TargetDuration)
 	}
 
-	// Delete running task
-	if err := s.st.DeleteRunningTask(); err != nil {
+	if err := s.st.DeleteRunningTask(task.TaskName); err != nil {
 		return entity.TaskRecord{}, fmt.Errorf("failed to clear running task: %w", err)
 	}
 
 	return record, nil
 }
 
-func (s *RunningTaskService) Pause() (entity.RunningTask, error) {
-	task, err := s.st.GetRunningTask()
-	if err != nil {
-		return entity.RunningTask{}, err
+func (s *RunningTaskService) Pause(taskName string) (entity.RunningTask, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var task entity.RunningTask
+	var err error
+
+	if taskName != "" {
+		task, err = s.st.GetRunningTask(taskName)
+	} else {
+		task, err = s.st.GetActiveRunningTask()
 	}
+
+	if err != nil || task.TaskName == "" {
+		return entity.RunningTask{}, fmt.Errorf("no running task found")
+	}
+
 	if !task.IsRunning {
 		return task, nil // Already paused
 	}
@@ -152,13 +198,44 @@ func (s *RunningTaskService) Pause() (entity.RunningTask, error) {
 	return task, nil
 }
 
-func (s *RunningTaskService) Resume() (entity.RunningTask, error) {
-	task, err := s.st.GetRunningTask()
-	if err != nil {
-		return entity.RunningTask{}, err
+func (s *RunningTaskService) Resume(taskName string) (entity.RunningTask, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var task entity.RunningTask
+
+	if taskName != "" {
+		var err error
+		task, err = s.st.GetRunningTask(taskName)
+		if err != nil {
+			return entity.RunningTask{}, err
+		}
+	} else {
+		tasks, errAll := s.st.GetAllRunningTasks()
+		if errAll == nil {
+			for _, t := range tasks {
+				if !t.IsRunning {
+					task = t
+					break
+				}
+			}
+		}
 	}
+
+	if task.TaskName == "" {
+		return entity.RunningTask{}, fmt.Errorf("no paused task found to resume")
+	}
+
 	if task.IsRunning {
 		return task, nil // Already running
+	}
+
+	// Before resuming, pause any other active running task
+	active, errActive := s.st.GetActiveRunningTask()
+	if errActive == nil && active.TaskName != "" && active.TaskName != task.TaskName {
+		active.Accumulated += int(time.Since(active.StartTime).Minutes())
+		active.IsRunning = false
+		_ = s.st.UpsertRunningTask(active)
 	}
 
 	task.StartTime = time.Now()
@@ -170,8 +247,26 @@ func (s *RunningTaskService) Resume() (entity.RunningTask, error) {
 	return task, nil
 }
 
-func (s *RunningTaskService) GetStatus() (entity.RunningTask, error) {
-	// On get status, we might want to return a "computed" duration valid for NOW
-	// But the entity itself just stores the state. Handler can compute for frontend.
-	return s.st.GetRunningTask()
+func (s *RunningTaskService) GetStatus(taskName string) (entity.RunningTask, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if taskName != "" {
+		return s.st.GetRunningTask(taskName)
+	}
+	task, err := s.st.GetActiveRunningTask()
+	if err == nil && task.TaskName != "" {
+		return task, nil
+	}
+	tasks, errAll := s.st.GetAllRunningTasks()
+	if errAll == nil && len(tasks) > 0 {
+		return tasks[0], nil
+	}
+	return entity.RunningTask{}, nil
+}
+
+func (s *RunningTaskService) GetAllTasks() ([]entity.RunningTask, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.GetAllRunningTasks()
 }

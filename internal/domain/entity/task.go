@@ -73,4 +73,3 @@ type WeeklyStatsResponse struct {
 	WeeklyTargets []WeeklyTarget     `json:"weekly_targets"`
 	WeeklyTasks   []WeeklyTaskTarget `json:"weekly_tasks"`
 }
-

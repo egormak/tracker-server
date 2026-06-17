@@ -130,6 +130,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/timer/run/pause", runningTaskHandler.Pause)
 	api.Post("/v1/timer/run/resume", runningTaskHandler.Resume)
 	api.Get("/v1/timer/run/status", runningTaskHandler.Status)
+	api.Get("/v1/timer/run/list", runningTaskHandler.List)
 
 	app.Get("/", welcome.Welcome)
 }

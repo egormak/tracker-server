@@ -54,7 +54,9 @@ type Storage interface {
 	GetDaySchedule(day string) (entity.DaySchedule, error)
 
 	// Running Task
-	GetRunningTask() (entity.RunningTask, error)
+	GetRunningTask(taskName string) (entity.RunningTask, error)
+	GetActiveRunningTask() (entity.RunningTask, error)
+	GetAllRunningTasks() ([]entity.RunningTask, error)
 	UpsertRunningTask(task entity.RunningTask) error
-	DeleteRunningTask() error
+	DeleteRunningTask(taskName string) error
 }

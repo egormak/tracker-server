@@ -58,4 +58,3 @@ func (s *Storage) GetRecordsForDates(dates []string) ([]entity.TaskRecord, error
 
 	return result, nil
 }
-

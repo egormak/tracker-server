@@ -212,4 +212,3 @@ func (s *StatisticService) GetWeeklyStats() (entity.WeeklyStatsResponse, error) 
 		WeeklyTasks:   weeklyTasks,
 	}, nil
 }
-

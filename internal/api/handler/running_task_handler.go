@@ -39,7 +39,12 @@ func (h *RunningTaskHandler) Start(c *fiber.Ctx) error {
 func (h *RunningTaskHandler) Stop(c *fiber.Ctx) error {
 	slog.Info("RunningTaskHandler.Stop")
 
-	record, err := h.service.Stop()
+	var body struct {
+		TaskName string `json:"task_name"`
+	}
+	_ = c.BodyParser(&body)
+
+	record, err := h.service.Stop(body.TaskName)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}
@@ -50,7 +55,12 @@ func (h *RunningTaskHandler) Stop(c *fiber.Ctx) error {
 func (h *RunningTaskHandler) Pause(c *fiber.Ctx) error {
 	slog.Info("RunningTaskHandler.Pause")
 
-	task, err := h.service.Pause()
+	var body struct {
+		TaskName string `json:"task_name"`
+	}
+	_ = c.BodyParser(&body)
+
+	task, err := h.service.Pause(body.TaskName)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}
@@ -61,7 +71,12 @@ func (h *RunningTaskHandler) Pause(c *fiber.Ctx) error {
 func (h *RunningTaskHandler) Resume(c *fiber.Ctx) error {
 	slog.Info("RunningTaskHandler.Resume")
 
-	task, err := h.service.Resume()
+	var body struct {
+		TaskName string `json:"task_name"`
+	}
+	_ = c.BodyParser(&body)
+
+	task, err := h.service.Resume(body.TaskName)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}
@@ -70,10 +85,20 @@ func (h *RunningTaskHandler) Resume(c *fiber.Ctx) error {
 }
 
 func (h *RunningTaskHandler) Status(c *fiber.Ctx) error {
-	task, err := h.service.GetStatus()
+	taskName := c.Query("task_name")
+	task, err := h.service.GetStatus(taskName)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}
 
 	return c.Status(200).JSON(fiber.Map{"status": "success", "data": task})
+}
+
+func (h *RunningTaskHandler) List(c *fiber.Ctx) error {
+	tasks, err := h.service.GetAllTasks()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
+	}
+
+	return c.Status(200).JSON(fiber.Map{"status": "success", "data": tasks})
 }
