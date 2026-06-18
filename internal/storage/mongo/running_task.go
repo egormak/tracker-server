@@ -76,6 +76,9 @@ func (s *Storage) UpsertRunningTask(task entity.RunningTask) error {
 
 	collection := s.Client.Database(dbName).Collection(runningTaskCollection)
 
+	// Clear ID to prevent MongoDB from complaining about updating the immutable _id field
+	task.ID = ""
+
 	filter := bson.M{"task_name": task.TaskName}
 	update := bson.M{"$set": task}
 	opts := options.Update().SetUpsert(true)

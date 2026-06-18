@@ -114,7 +114,10 @@ func (s *RunningTaskService) Stop(taskName string) (entity.TaskRecord, error) {
 		}
 	}
 
-	if err != nil || task.TaskName == "" {
+	if err != nil {
+		return entity.TaskRecord{}, fmt.Errorf("failed to get task: %w", err)
+	}
+	if task.TaskName == "" {
 		return entity.TaskRecord{}, fmt.Errorf("no running task found")
 	}
 
@@ -181,7 +184,10 @@ func (s *RunningTaskService) Pause(taskName string) (entity.RunningTask, error) 
 		task, err = s.st.GetActiveRunningTask()
 	}
 
-	if err != nil || task.TaskName == "" {
+	if err != nil {
+		return entity.RunningTask{}, fmt.Errorf("failed to get task: %w", err)
+	}
+	if task.TaskName == "" {
 		return entity.RunningTask{}, fmt.Errorf("no running task found")
 	}
 
