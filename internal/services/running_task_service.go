@@ -110,6 +110,7 @@ func (s *RunningTaskService) Stop(taskName string) (entity.TaskRecord, error) {
 			tasks, errAll := s.st.GetAllRunningTasks()
 			if errAll == nil && len(tasks) > 0 {
 				task = tasks[0]
+				err = nil
 			}
 		}
 	}
