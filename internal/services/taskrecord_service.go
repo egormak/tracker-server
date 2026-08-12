@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 	"tracker-server/internal/domain/entity"
 )
@@ -34,6 +35,48 @@ type TaskRecordService struct {
 
 func NewTaskRecordService(st TaskRecordStorage) *TaskRecordService {
 	return &TaskRecordService{st: st}
+}
+
+type ScheduleAndParamsStorage interface {
+	GetActiveSchedule() (entity.WeeklySchedule, error)
+	GetTaskParams(taskName string) (entity.TaskParams, error)
+}
+
+func GetScheduledTargetTime(st ScheduleAndParamsStorage, taskName string) int {
+	schedule, err := st.GetActiveSchedule()
+	if err == nil {
+		today := strings.ToLower(time.Now().Weekday().String())
+		var daySchedule entity.DaySchedule
+		switch today {
+		case "monday":
+			daySchedule = schedule.Monday
+		case "tuesday":
+			daySchedule = schedule.Tuesday
+		case "wednesday":
+			daySchedule = schedule.Wednesday
+		case "thursday":
+			daySchedule = schedule.Thursday
+		case "friday":
+			daySchedule = schedule.Friday
+		case "saturday":
+			daySchedule = schedule.Saturday
+		case "sunday":
+			daySchedule = schedule.Sunday
+		}
+
+		for _, t := range daySchedule.Tasks {
+			if strings.EqualFold(t.Name, taskName) {
+				return t.Time
+			}
+		}
+	}
+
+	params, err := st.GetTaskParams(taskName)
+	if err == nil && params.Time > 0 {
+		return params.Time
+	}
+
+	return 0
 }
 
 func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest) error {
@@ -190,38 +233,42 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 		return nil
 	}
 
-	// Check if this is a work task and whether it exceeds the 270 min daily minimum target
-	if (taskRecordRequest.TaskName == "work" || taskRole == "work") && taskRecordRequest.SourceDay == "" {
-		targetMin := 270
-		todayDone, _ := s.st.GetTodayTaskDuration(taskRecordRequest.TaskName)
-		if todayDone+taskRecordRequest.TimeDone > targetMin {
-			todayAllowed := targetMin - todayDone
-			if todayAllowed < 0 {
-				todayAllowed = 0
-			}
-
-			overtime := taskRecordRequest.TimeDone - todayAllowed
-			if overtime > 0 {
-				taskRecordRequest.TimeDone = todayAllowed
-
-				// Create credit record for TOMORROW
-				tomorrowDay := GetTomorrowDayName()
-				tomorrowDate := CalculateDateForTomorrow()
-				overtimeRecord := entity.TaskRecord{
-					Name:         taskRecordRequest.TaskName,
-					Role:         taskRole,
-					TimeDuration: overtime,
-					Date:         tomorrowDate,
-					SourceDay:    tomorrowDay,
+	// Check if this task is strict and whether it exceeds today's schedule target time
+	isStrict, _ := s.st.IsTaskStrict(taskRecordRequest.TaskName)
+	if isStrict && taskRecordRequest.SourceDay == "" {
+		targetMin := GetScheduledTargetTime(s.st, taskRecordRequest.TaskName)
+		if targetMin > 0 {
+			todayDone, _ := s.st.GetTodayTaskDuration(taskRecordRequest.TaskName)
+			if todayDone+taskRecordRequest.TimeDone > targetMin {
+				todayAllowed := targetMin - todayDone
+				if todayAllowed < 0 {
+					todayAllowed = 0
 				}
 
-				if err := s.st.AddTaskRecord(overtimeRecord); err == nil {
-					slog.Info("🎉 WORK OVERTIME CREDITED TO TOMORROW",
-						"task", taskRecordRequest.TaskName,
-						"overtime_min", overtime,
-						"tomorrow_day", tomorrowDay,
-						"tomorrow_date", tomorrowDate)
-					_ = s.st.AddRoleMinutes(overtimeRecord)
+				overtime := taskRecordRequest.TimeDone - todayAllowed
+				if overtime > 0 {
+					taskRecordRequest.TimeDone = todayAllowed
+
+					// Create credit record for TOMORROW
+					tomorrowDay := GetTomorrowDayName()
+					tomorrowDate := CalculateDateForTomorrow()
+					overtimeRecord := entity.TaskRecord{
+						Name:         taskRecordRequest.TaskName,
+						Role:         taskRole,
+						TimeDuration: overtime,
+						Date:         tomorrowDate,
+						SourceDay:    tomorrowDay,
+					}
+
+					if err := s.st.AddTaskRecord(overtimeRecord); err == nil {
+						slog.Info("🎉 STRICT TASK OVERTIME CREDITED TO TOMORROW",
+							"task", taskRecordRequest.TaskName,
+							"overtime_min", overtime,
+							"target_min", targetMin,
+							"tomorrow_day", tomorrowDay,
+							"tomorrow_date", tomorrowDate)
+						_ = s.st.AddRoleMinutes(overtimeRecord)
+					}
 				}
 			}
 		}

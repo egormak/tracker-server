@@ -19,6 +19,10 @@ type RunningTaskStorage interface {
 	AddRoleMinutes(task entity.TaskRecord) error
 	AddRest(restTime int) error
 	TimeListDelDB(timeDuretion int) error
+	GetTodayTaskDuration(taskName string) (int, error)
+	GetActiveSchedule() (entity.WeeklySchedule, error)
+	GetTaskParams(taskName string) (entity.TaskParams, error)
+	IsTaskStrict(taskName string) (bool, error)
 }
 
 type RunningTaskService struct {
@@ -132,6 +136,43 @@ func (s *RunningTaskService) Stop(taskName string) (entity.TaskRecord, error) {
 		duration = 1
 	}
 
+	// Check if this task is strict and whether it exceeds today's schedule target time
+	isStrict, _ := s.st.IsTaskStrict(task.TaskName)
+	if isStrict && task.SourceDay == "" {
+		targetMin := GetScheduledTargetTime(s.st, task.TaskName)
+		if targetMin > 0 {
+			todayDone, _ := s.st.GetTodayTaskDuration(task.TaskName)
+			if todayDone+duration > targetMin {
+				todayAllowed := targetMin - todayDone
+				if todayAllowed < 0 {
+					todayAllowed = 0
+				}
+
+				overtime := duration - todayAllowed
+				if overtime > 0 {
+					duration = todayAllowed
+
+					// Create credit record for TOMORROW
+					tomorrowDay := GetTomorrowDayName()
+					tomorrowDate := CalculateDateForTomorrow()
+					overtimeRecord := entity.TaskRecord{
+						Name:         task.TaskName,
+						Role:         task.Role,
+						TimeDuration: overtime,
+						Date:         tomorrowDate,
+						SourceDay:    tomorrowDay,
+					}
+
+					if err := s.st.AddTaskRecord(overtimeRecord); err == nil {
+						fmt.Printf("🎉 STRICT TASK OVERTIME CREDITED TO TOMORROW (from timer): %d min to %s (%s)\n", overtime, tomorrowDay, tomorrowDate)
+						_ = s.st.AddRoleMinutes(overtimeRecord)
+						_ = s.st.AddRest(overtime)
+					}
+				}
+			}
+		}
+	}
+
 	recordDate := time.Now().Format("2 January 2006")
 	if task.SourceDay != "" {
 		recordDate = CalculateDateForDay(task.SourceDay)
@@ -145,15 +186,17 @@ func (s *RunningTaskService) Stop(taskName string) (entity.TaskRecord, error) {
 		SourceDay:    task.SourceDay,
 	}
 
-	if err := s.st.AddTaskRecord(record); err != nil {
-		return entity.TaskRecord{}, fmt.Errorf("failed to save task record: %w", err)
-	}
+	if duration > 0 {
+		if err := s.st.AddTaskRecord(record); err != nil {
+			return entity.TaskRecord{}, fmt.Errorf("failed to save task record: %w", err)
+		}
 
-	if err := s.st.AddRoleMinutes(record); err != nil {
-		fmt.Printf("failed to add role minutes: %v\n", err)
-	}
-	if err := s.st.AddRest(record.TimeDuration); err != nil {
-		fmt.Printf("failed to add rest: %v\n", err)
+		if err := s.st.AddRoleMinutes(record); err != nil {
+			fmt.Printf("failed to add role minutes: %v\n", err)
+		}
+		if err := s.st.AddRest(record.TimeDuration); err != nil {
+			fmt.Printf("failed to add rest: %v\n", err)
+		}
 	}
 
 	if s.nt != nil && task.TelegramMessageID != 0 {
