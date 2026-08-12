@@ -23,6 +23,7 @@ type TaskRecordStorage interface {
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	GetActiveSchedule() (entity.WeeklySchedule, error)
 	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
+	IsTaskStrict(taskName string) (bool, error)
 	GetRecords() ([]entity.TaskRecord, error)
 	CleanRecords()
 }
@@ -187,6 +188,43 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 	if taskRecordRequest.TimeDone <= 0 {
 		slog.Info("All time distributed to past schedules, nothing left for today.")
 		return nil
+	}
+
+	// Check if this is a work task and whether it exceeds the 270 min daily minimum target
+	if (taskRecordRequest.TaskName == "work" || taskRole == "work") && taskRecordRequest.SourceDay == "" {
+		targetMin := 270
+		todayDone, _ := s.st.GetTodayTaskDuration(taskRecordRequest.TaskName)
+		if todayDone+taskRecordRequest.TimeDone > targetMin {
+			todayAllowed := targetMin - todayDone
+			if todayAllowed < 0 {
+				todayAllowed = 0
+			}
+
+			overtime := taskRecordRequest.TimeDone - todayAllowed
+			if overtime > 0 {
+				taskRecordRequest.TimeDone = todayAllowed
+
+				// Create credit record for TOMORROW
+				tomorrowDay := GetTomorrowDayName()
+				tomorrowDate := CalculateDateForTomorrow()
+				overtimeRecord := entity.TaskRecord{
+					Name:         taskRecordRequest.TaskName,
+					Role:         taskRole,
+					TimeDuration: overtime,
+					Date:         tomorrowDate,
+					SourceDay:    tomorrowDay,
+				}
+
+				if err := s.st.AddTaskRecord(overtimeRecord); err == nil {
+					slog.Info("🎉 WORK OVERTIME CREDITED TO TOMORROW",
+						"task", taskRecordRequest.TaskName,
+						"overtime_min", overtime,
+						"tomorrow_day", tomorrowDay,
+						"tomorrow_date", tomorrowDate)
+					_ = s.st.AddRoleMinutes(overtimeRecord)
+				}
+			}
+		}
 	}
 
 	record := entity.TaskRecord{

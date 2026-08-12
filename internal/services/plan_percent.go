@@ -284,15 +284,24 @@ func (s *TaskRecordService) GetTaskByNameSchedule(taskName string, scheduleServi
 				timeLeft = task.Time
 			}
 
-			if timeLeft > 0 {
+			isStrict, _ := s.st.IsTaskStrict(task.Name)
+			if timeLeft > 0 || !isStrict {
 				percent := 100
 				if len(task.Percents) > 0 {
 					percent = task.Percents[0]
 				}
 
+				if timeLeft <= 0 {
+					timeLeft = task.Time
+					if timeLeft <= 0 {
+						timeLeft = 1
+					}
+				}
+
 				slog.Info("Found task in today's schedule",
 					"task", task.Name,
 					"time_left", timeLeft,
+					"is_strict", isStrict,
 					"priority", task.Priority)
 
 				return entity.PlanPercentResponse{

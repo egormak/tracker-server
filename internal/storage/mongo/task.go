@@ -208,6 +208,22 @@ func (s *Storage) GetTaskParams(taskName string) (entity.TaskParams, error) {
 
 }
 
+func (s *Storage) IsTaskStrict(taskName string) (bool, error) {
+	database := s.Client.Database(dbName)
+	coll := database.Collection(taskNamesList)
+
+	var result entity.TaskDefinition
+	err := coll.FindOne(s.Context, bson.D{{"name", taskName}}).Decode(&result)
+	if err != nil {
+		if strings.EqualFold(taskName, "work") || strings.EqualFold(taskName, "english") {
+			return true, nil
+		}
+		return false, nil
+	}
+
+	return result.TimeStrictly, nil
+}
+
 func (s *Storage) GetDayTaskRecord(taskName string) (int, error) {
 
 	// Set Value for DB

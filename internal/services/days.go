@@ -13,6 +13,18 @@ func IsWeekendNow() bool {
 	return today == "Sunday" || today == "Saturday"
 }
 
+// GetTomorrowDayName returns tomorrow's weekday name in lowercase (e.g., "thursday")
+func GetTomorrowDayName() string {
+	tomorrow := time.Now().AddDate(0, 0, 1)
+	return strings.ToLower(tomorrow.Weekday().String())
+}
+
+// CalculateDateForTomorrow returns tomorrow's date in "2 January 2006" format
+func CalculateDateForTomorrow() string {
+	tomorrow := time.Now().AddDate(0, 0, 1)
+	return tomorrow.Format("2 January 2006")
+}
+
 // CalculateDateForDay calculates the date for a given day of the week in the current week.
 // If the specified day is in the future (e.g., asking for Friday on Monday), it returns the date from the previous week.
 // Returns the date in "2 January 2006" format, or today's date if the day name is invalid.

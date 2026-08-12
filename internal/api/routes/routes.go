@@ -24,6 +24,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	manageService := services.NewManageService(mongoconn)
 	scheduleService := services.NewScheduleService(mongoconn)
 	runningTaskService := services.NewRunningTaskService(mongoconn, notify)
+	eveningService := services.NewEveningService(statsService)
 
 	// Handlers
 	// Task
@@ -40,6 +41,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	scheduleHandler := handler.NewScheduleHandler(scheduleService)
 	// Running Task
 	runningTaskHandler := handler.NewRunningTaskHandler(runningTaskService)
+	// Evening Mode
+	eveningHandler := handler.NewEveningHandler(eveningService)
 
 	// OLD Logic (manage and role handlers still needed for legacy routes)
 	roleHandler := role.New(mongoconn, notify)
@@ -131,6 +134,10 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/timer/run/resume", runningTaskHandler.Resume)
 	api.Get("/v1/timer/run/status", runningTaskHandler.Status)
 	api.Get("/v1/timer/run/list", runningTaskHandler.List)
+
+	// Evening Mode
+	api.Get("/v1/mode/evening-focus", eveningHandler.GetEveningFocus)
+	api.Post("/v1/mode/evening-focus/skip", eveningHandler.SkipTask)
 
 	app.Get("/", welcome.Welcome)
 }

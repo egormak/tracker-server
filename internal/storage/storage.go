@@ -37,6 +37,7 @@ type Storage interface {
 	GetGroupName(groupNameOrdinal int) (string, error)
 	GetTodayTaskDuration(taskName string) (int, error)
 	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
+	IsTaskStrict(taskName string) (bool, error)
 	// GetTaskRecordToday(opts ...TaskRecordOption) ([]TaskRecord, error)
 	// WithCheckBusinessDay(check bool) TaskRecordOption
 	CreateTask(task entity.TaskDefinition) error

@@ -24,11 +24,12 @@ type TaskResult struct {
 }
 
 type TaskDefinition struct {
-	Name         string
-	Role         string
-	TimeSchedule int
-	Priority     int
-	Date         string
+	Name         string `bson:"name" json:"name"`
+	Role         string `bson:"role" json:"role"`
+	TimeSchedule int    `bson:"timeschedule" json:"timeschedule"`
+	Priority     int    `bson:"priority" json:"priority"`
+	Date         string `bson:"date" json:"date"`
+	TimeStrictly bool   `bson:"timestrictly" json:"timestrictly"`
 }
 
 type TaskParams struct {

@@ -13,6 +13,9 @@ type MockTaskRecordStorage struct {
 func (m *MockTaskRecordStorage) GetRole(taskName string) (string, error) {
 	return "work", nil
 }
+func (m *MockTaskRecordStorage) IsTaskStrict(taskName string) (bool, error) {
+	return true, nil
+}
 func (m *MockTaskRecordStorage) AddTaskRecord(task entity.TaskRecord) error {
 	m.Records = append(m.Records, task)
 	return nil
