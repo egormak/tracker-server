@@ -10,7 +10,7 @@ tracker-server is a Go/Fiber REST API for personal time tracking, backed by Mong
 
 - `make run` — run the server locally on `:3000` (requires `./config.yaml` in repo root; MongoDB must be reachable).
 - `make build` — build binary to `bin/server`.
-- `make test` — `go test ./...` (only `internal/services/taskrecord_backfill_test.go` exists today).
+- `make test` — `go test ./...` (tests live in `internal/services/`: `taskrecord_backfill_test.go`, `evening_service_test.go`).
 - `go test ./internal/services/... -run TestName -v` — run a single test.
 - `make fmt` / `make vet` / `make tidy` — `go fmt`, `go vet`, `go mod tidy`.
 - `make docker-build TAG=...` / `make docker-run TAG=...` / `make docker-prod` / `make docker-stop`.
@@ -24,7 +24,7 @@ Request flow: **Handler → Service → Storage interface → MongoDB**.
 - `cmd/server/main.go` — entry point. Loads config, connects to MongoDB, constructs the Telegram notifier, creates the Fiber app (with request logger middleware), and calls `internal/api/routes.RegisterRoutes`.
 - `internal/api/routes/routes.go` — the single place all routes are wired up. Services and handlers are constructed here and injected; there's no DI framework. When adding an endpoint, this is where handler/service instantiation and route registration both happen.
 - `internal/api/middleware/telegram.go` — `TelegramAuth` middleware wraps the entire `/api` group. If `telegram.enable_webapp_auth` is true in config, every request must carry either `X-Bot-Token` (matching `telegram.api_key`) or a valid signed `X-Telegram-Init-Data` header (HMAC-verified, and the embedded Telegram user ID must equal `telegram.room_id`). When the flag is false (the default), auth is bypassed entirely.
-- `internal/api/handler/` — **current** HTTP handler layer (task, taskrecord, rest, statistic, manage, schedule, running_task). Parse/validate request, call service, return JSON `{status, message/data}`. Prefer this layer for new endpoints.
+- `internal/api/handler/` — **current** HTTP handler layer (task, taskrecord, rest, statistic, manage, schedule, running_task, evening). Parse/validate request, call service, return JSON `{status, message/data}`. Prefer this layer for new endpoints.
 - `internal/handler/` — **legacy** Fiber handlers (`manage/`, `role/`, `welcome/`) still powering some routes (e.g. `/roles/*`, `/manage/procents`, `/manage/timer/*`, `/manage/telegram/*`, the `/` welcome route). Only touch these for backwards-compat fixes, not new features.
 - `internal/services/` — business logic. Each service declares its own narrow storage interface (e.g. `TaskRecordStorage`, `RunningTaskStorage`, `ScheduleStorage`) naming only the methods it needs, even though one concrete `*mongo.Storage` satisfies all of them. `services/days.go` holds shared date helpers (`CalculateDateForDay`, `DayIndex`, `IsWeekendNow`) used across taskrecord/schedule/running-task logic.
 - `internal/storage/storage.go` — the full `Storage` interface that `internal/storage/mongo` implements; this is the contract new storage methods must be added to.
@@ -41,11 +41,13 @@ Request flow: **Handler → Service → Storage interface → MongoDB**.
 - **Source-day / backfill** (`taskrecord_service.AddRecord`, `services/days.go`): a record can target a specific past weekday (`source_day`) rather than today via `CalculateDateForDay`. When `ManageByService` is set, the service walks Monday→yesterday against the active weekly schedule and backfills any shortfall for that task before applying remaining time to today.
 - **Running tasks** (`services/running_task_service.go`): supports multiple concurrently-tracked tasks, but only one can be `IsRunning` at a time — starting/resuming one pauses whichever other task was active, accumulating its elapsed minutes. All mutating methods hold `RunningTaskService.mu` (a `sync.Mutex`) to serialize concurrent start/stop/pause/resume calls. `Stop` computes the record date from the task's `SourceDay` if set, otherwise today.
 - **Weekly schedule / rollover** (`services/schedule_service.go`): `WeeklySchedule` has one `DaySchedule` per weekday; rollover/deficit calculations use a fixed Monday=0..Sunday=6 `dayOrder` map distinct from `days.go`'s `DayIndex` (same semantics, kept separately — check both if you change day-ordering logic).
+- **Strict tasks & overtime credit** (`taskrecord_service.AddRecord`, `running_task_service.Stop`, `storage.IsTaskStrict`): a task with `TimeStrictly: true` is capped at its scheduled target time for today (`GetScheduledTargetTime`); any time recorded (or accumulated on a running-task stop) beyond that cap is *not* applied to today — it's split off into a separate `TaskRecord` dated tomorrow (`GetTomorrowDayName`/`CalculateDateForTomorrow`) via a second `AddTaskRecord`+`AddRoleMinutes` call. This only triggers when `SourceDay` is empty (i.e. not already a backfill record), avoiding double-shifting.
+- **Evening focus mode** (`services/evening_service.go`, `GET/POST /api/v1/mode/evening-focus[/skip]`): ranks non-`work`/`english` tasks by weekly deficit (from `StatisticService.GetWeeklyStats`) to suggest a catch-up task. `EveningService` holds in-memory state (`snoozedTonight`, guarded by its own `mu`) that is *not* persisted to MongoDB and resets once per calendar day (`checkDailyResetLocked`, keyed off `nowFunc`) — a server restart also clears it. `SkipTask` snoozes a task (by lowercased name) until the next day-boundary reset.
 - Date format used consistently for records: `time.Now().Format("2 January 2006")` — not RFC3339. Don't introduce a different format without updating all read/write sites.
 
 ## Coding Conventions
 
-- Go 1.25.1 (per `go.mod`; note the Dockerfile may pin a different Go version for the build image — check it isn't silently mismatched before relying on toolchain-specific behavior).
+- Go 1.25.1 (per `go.mod`; `Dockerfile`'s builder image is currently pinned to match — re-check both if you bump either).
 - `gofmt`/`go vet` before committing. Tabs, idiomatic Go.
 - Files: `feature_action.go` naming (e.g. `taskrecord_service.go`, `running_task_handler.go`). Packages lower_snakecase.
 - Exported PascalCase, unexported lowerCamelCase.
