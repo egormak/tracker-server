@@ -5,31 +5,53 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"tracker-server/internal/domain/entity"
 )
 
 type EveningService struct {
 	statSrv        *StatisticService
 	snoozedTonight map[string]bool
-	mu             sync.RWMutex
+	lastResetDate  string
+	nowFunc        func() time.Time
+	mu             sync.Mutex
 }
 
 func NewEveningService(statSrv *StatisticService) *EveningService {
 	return &EveningService{
 		statSrv:        statSrv,
 		snoozedTonight: make(map[string]bool),
+		nowFunc:        time.Now,
+	}
+}
+
+func (s *EveningService) checkDailyResetLocked() {
+	now := time.Now()
+	if s.nowFunc != nil {
+		now = s.nowFunc()
+	}
+	today := now.Format("2006-01-02")
+	if s.lastResetDate != today {
+		s.snoozedTonight = make(map[string]bool)
+		s.lastResetDate = today
+		slog.Info("Reset snoozed tasks for new day in evening focus", "date", today)
 	}
 }
 
 func (s *EveningService) GetEveningFocus(category string, timeOverride int) (entity.EveningFocusResponse, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	stats, err := s.statSrv.GetWeeklyStats()
 	if err != nil {
 		slog.Error("Failed to get weekly stats for evening focus", "err", err)
 		return entity.EveningFocusResponse{}, err
 	}
+
+	s.mu.Lock()
+	s.checkDailyResetLocked()
+	snoozedSnapshot := make(map[string]bool, len(s.snoozedTonight))
+	for k, v := range s.snoozedTonight {
+		snoozedSnapshot[k] = v
+	}
+	s.mu.Unlock()
 
 	var candidates []entity.EveningFocusCandidate
 
@@ -46,7 +68,7 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 		}
 
 		// Skip snoozed for tonight
-		if s.snoozedTonight[lowerName] {
+		if snoozedSnapshot[lowerName] {
 			continue
 		}
 
@@ -86,6 +108,8 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 func (s *EveningService) SkipTask(taskName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.checkDailyResetLocked()
 
 	if taskName != "" {
 		lowerName := strings.ToLower(taskName)
