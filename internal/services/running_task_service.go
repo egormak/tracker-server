@@ -6,6 +6,7 @@ import (
 	"time"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/notify"
+	"tracker-server/internal/realtime"
 )
 
 type RunningTaskStorage interface {
@@ -26,18 +27,27 @@ type RunningTaskStorage interface {
 }
 
 type RunningTaskService struct {
-	st RunningTaskStorage
-	nt notify.Notify
-	mu sync.Mutex
+	st  RunningTaskStorage
+	nt  notify.Notify
+	hub *realtime.Hub
+	mu  sync.Mutex
 }
 
 func NewRunningTaskService(st RunningTaskStorage, nt notify.Notify) *RunningTaskService {
 	return &RunningTaskService{st: st, nt: nt}
 }
 
+func (s *RunningTaskService) SetHub(hub *realtime.Hub) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hub = hub
+}
+
 func (s *RunningTaskService) Start(taskName string, role string, targetDuration int, sourceDay string) (entity.RunningTask, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	now := time.Now()
 
 	// Check if this task already exists
 	existing, err := s.st.GetRunningTask(taskName)
@@ -49,24 +59,54 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 		// First, pause any other currently running task
 		active, errActive := s.st.GetActiveRunningTask()
 		if errActive == nil && active.TaskName != "" && active.TaskName != taskName {
-			active.Accumulated += int(time.Since(active.StartTime).Minutes())
+			active.Accumulated += int(now.Sub(active.StartTime).Minutes())
 			active.IsRunning = false
+			active.DeadlineAt = time.Time{}
 			_ = s.st.UpsertRunningTask(active)
+			s.broadcastEvent(realtime.Event{
+				Type:     realtime.EventTaskPaused,
+				TaskName: active.TaskName,
+				Role:     active.Role,
+				Reason:   "switch_task",
+				Data:     active,
+			})
 		}
-		existing.StartTime = time.Now()
+		existing.StartTime = now
+		existing.LastHeartbeatAt = now
 		existing.IsRunning = true
+		if existing.TargetDuration > 0 {
+			remainingMin := existing.TargetDuration - existing.Accumulated
+			if remainingMin > 0 {
+				existing.DeadlineAt = now.Add(time.Duration(remainingMin) * time.Minute)
+			}
+		}
 		if err := s.st.UpsertRunningTask(existing); err != nil {
 			return entity.RunningTask{}, err
 		}
+		s.broadcastEvent(realtime.Event{
+			Type:     realtime.EventTaskResumed,
+			TaskName: existing.TaskName,
+			Role:     existing.Role,
+			Duration: existing.TargetDuration,
+			Data:     existing,
+		})
 		return existing, nil
 	}
 
 	// Starting a new task. Pause any currently active running task first.
 	active, errActive := s.st.GetActiveRunningTask()
 	if errActive == nil && active.TaskName != "" {
-		active.Accumulated += int(time.Since(active.StartTime).Minutes())
+		active.Accumulated += int(now.Sub(active.StartTime).Minutes())
 		active.IsRunning = false
+		active.DeadlineAt = time.Time{}
 		_ = s.st.UpsertRunningTask(active)
+		s.broadcastEvent(realtime.Event{
+			Type:     realtime.EventTaskPaused,
+			TaskName: active.TaskName,
+			Role:     active.Role,
+			Reason:   "switch_task",
+			Data:     active,
+		})
 	}
 
 	if role == "" {
@@ -79,12 +119,17 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 	}
 
 	task := entity.RunningTask{
-		TaskName:       taskName,
-		Role:           role,
-		StartTime:      time.Now(),
-		IsRunning:      true,
-		TargetDuration: targetDuration,
-		SourceDay:      sourceDay,
+		TaskName:        taskName,
+		Role:            role,
+		StartTime:       now,
+		LastHeartbeatAt: now,
+		IsRunning:       true,
+		TargetDuration:  targetDuration,
+		SourceDay:       sourceDay,
+	}
+
+	if targetDuration > 0 {
+		task.DeadlineAt = now.Add(time.Duration(targetDuration) * time.Minute)
 	}
 
 	if s.nt != nil {
@@ -96,12 +141,26 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 	if err := s.st.UpsertRunningTask(task); err != nil {
 		return entity.RunningTask{}, err
 	}
+
+	s.broadcastEvent(realtime.Event{
+		Type:     realtime.EventTaskStarted,
+		TaskName: task.TaskName,
+		Role:     task.Role,
+		Duration: task.TargetDuration,
+		Data:     task,
+	})
+
 	return task, nil
 }
 
-func (s *RunningTaskService) Stop(taskName string) (entity.TaskRecord, error) {
+func (s *RunningTaskService) Stop(taskName string, reasons ...string) (entity.TaskRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	reason := "manual"
+	if len(reasons) > 0 && reasons[0] != "" {
+		reason = reasons[0]
+	}
 
 	var task entity.RunningTask
 	var err error
@@ -212,12 +271,26 @@ func (s *RunningTaskService) Stop(taskName string) (entity.TaskRecord, error) {
 		return entity.TaskRecord{}, fmt.Errorf("failed to clear running task: %w", err)
 	}
 
+	s.broadcastEvent(realtime.Event{
+		Type:     realtime.EventTaskStopped,
+		TaskName: task.TaskName,
+		Role:     task.Role,
+		Duration: record.TimeDuration,
+		Reason:   reason,
+		Data:     record,
+	})
+
 	return record, nil
 }
 
-func (s *RunningTaskService) Pause(taskName string) (entity.RunningTask, error) {
+func (s *RunningTaskService) Pause(taskName string, reasons ...string) (entity.RunningTask, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	reason := "manual"
+	if len(reasons) > 0 && reasons[0] != "" {
+		reason = reasons[0]
+	}
 
 	var task entity.RunningTask
 	var err error
@@ -241,10 +314,20 @@ func (s *RunningTaskService) Pause(taskName string) (entity.RunningTask, error) 
 
 	task.Accumulated += int(time.Since(task.StartTime).Minutes())
 	task.IsRunning = false
+	task.DeadlineAt = time.Time{}
 
 	if err := s.st.UpsertRunningTask(task); err != nil {
 		return entity.RunningTask{}, err
 	}
+
+	s.broadcastEvent(realtime.Event{
+		Type:     realtime.EventTaskPaused,
+		TaskName: task.TaskName,
+		Role:     task.Role,
+		Reason:   reason,
+		Data:     task,
+	})
+
 	return task, nil
 }
 
@@ -280,20 +363,82 @@ func (s *RunningTaskService) Resume(taskName string) (entity.RunningTask, error)
 		return task, nil // Already running
 	}
 
+	now := time.Now()
+
 	// Before resuming, pause any other active running task
 	active, errActive := s.st.GetActiveRunningTask()
 	if errActive == nil && active.TaskName != "" && active.TaskName != task.TaskName {
-		active.Accumulated += int(time.Since(active.StartTime).Minutes())
+		active.Accumulated += int(now.Sub(active.StartTime).Minutes())
 		active.IsRunning = false
+		active.DeadlineAt = time.Time{}
 		_ = s.st.UpsertRunningTask(active)
+		s.broadcastEvent(realtime.Event{
+			Type:     realtime.EventTaskPaused,
+			TaskName: active.TaskName,
+			Role:     active.Role,
+			Reason:   "switch_task",
+			Data:     active,
+		})
 	}
 
-	task.StartTime = time.Now()
+	task.StartTime = now
+	task.LastHeartbeatAt = now
 	task.IsRunning = true
+
+	if task.TargetDuration > 0 {
+		remainingMin := task.TargetDuration - task.Accumulated
+		if remainingMin > 0 {
+			task.DeadlineAt = now.Add(time.Duration(remainingMin) * time.Minute)
+		}
+	}
 
 	if err := s.st.UpsertRunningTask(task); err != nil {
 		return entity.RunningTask{}, err
 	}
+
+	s.broadcastEvent(realtime.Event{
+		Type:     realtime.EventTaskResumed,
+		TaskName: task.TaskName,
+		Role:     task.Role,
+		Duration: task.TargetDuration,
+		Data:     task,
+	})
+
+	return task, nil
+}
+
+func (s *RunningTaskService) Heartbeat(taskName string) (entity.RunningTask, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var task entity.RunningTask
+	var err error
+
+	if taskName != "" {
+		task, err = s.st.GetRunningTask(taskName)
+	} else {
+		task, err = s.st.GetActiveRunningTask()
+	}
+
+	if err != nil {
+		return entity.RunningTask{}, fmt.Errorf("failed to get task: %w", err)
+	}
+	if task.TaskName == "" {
+		return entity.RunningTask{}, nil // No active task
+	}
+
+	task.LastHeartbeatAt = time.Now()
+	if err := s.st.UpsertRunningTask(task); err != nil {
+		return entity.RunningTask{}, err
+	}
+
+	s.broadcastEvent(realtime.Event{
+		Type:     realtime.EventHeartbeatAck,
+		TaskName: task.TaskName,
+		Role:     task.Role,
+		Data:     task,
+	})
+
 	return task, nil
 }
 
@@ -319,4 +464,10 @@ func (s *RunningTaskService) GetAllTasks() ([]entity.RunningTask, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.st.GetAllRunningTasks()
+}
+
+func (s *RunningTaskService) broadcastEvent(event realtime.Event) {
+	if s.hub != nil {
+		s.hub.Broadcast(event)
+	}
 }

@@ -28,11 +28,20 @@ func TelegramAuth(cfg config.Config) fiber.Handler {
 
 		// Allow bypassing if the request contains the bot's API Key (e.g. from the bot container)
 		botToken := c.Get("X-Bot-Token")
+		if botToken == "" {
+			botToken = c.Query("botToken")
+		}
 		if botToken != "" && botToken == cfg.Telegram.APIKey {
 			return c.Next()
 		}
 
 		initData := c.Get("X-Telegram-Init-Data")
+		if initData == "" {
+			initData = c.Query("initData")
+			if initData == "" {
+				initData = c.Query("tgInitData")
+			}
+		}
 		if initData == "" {
 			slog.Warn("TelegramAuth: missing auth credentials")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{

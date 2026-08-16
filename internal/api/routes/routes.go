@@ -8,13 +8,14 @@ import (
 	"tracker-server/internal/handler/role"
 	"tracker-server/internal/handler/welcome"
 	"tracker-server/internal/notify"
+	"tracker-server/internal/realtime"
 	"tracker-server/internal/services"
 	"tracker-server/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify, cfg config.Config) {
+func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify, cfg config.Config, hub *realtime.Hub) *services.RunningTaskService {
 
 	// Services
 	taskService := services.NewTaskService(mongoconn, notify)
@@ -24,6 +25,9 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	manageService := services.NewManageService(mongoconn)
 	scheduleService := services.NewScheduleService(mongoconn)
 	runningTaskService := services.NewRunningTaskService(mongoconn, notify)
+	if hub != nil {
+		runningTaskService.SetHub(hub)
+	}
 	eveningService := services.NewEveningService(statsService)
 
 	// Handlers
@@ -40,7 +44,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Schedule
 	scheduleHandler := handler.NewScheduleHandler(scheduleService)
 	// Running Task
-	runningTaskHandler := handler.NewRunningTaskHandler(runningTaskService)
+	runningTaskHandler := handler.NewRunningTaskHandler(runningTaskService, hub)
 	// Evening Mode
 	eveningHandler := handler.NewEveningHandler(eveningService)
 
@@ -127,17 +131,20 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Put("/v1/schedule/:id/activate", scheduleHandler.SetActiveSchedule)
 
 	// Running Task
-
 	api.Post("/v1/timer/run/start", runningTaskHandler.Start)
 	api.Post("/v1/timer/run/stop", runningTaskHandler.Stop)
 	api.Post("/v1/timer/run/pause", runningTaskHandler.Pause)
 	api.Post("/v1/timer/run/resume", runningTaskHandler.Resume)
 	api.Get("/v1/timer/run/status", runningTaskHandler.Status)
 	api.Get("/v1/timer/run/list", runningTaskHandler.List)
+	api.Post("/v1/timer/run/heartbeat", runningTaskHandler.Heartbeat)
+	api.Get("/v1/timer/ws", runningTaskHandler.WebSocketUpgradeCheck, runningTaskHandler.WebSocketHandler())
 
 	// Evening Mode
 	api.Get("/v1/mode/evening-focus", eveningHandler.GetEveningFocus)
 	api.Post("/v1/mode/evening-focus/skip", eveningHandler.SkipTask)
 
 	app.Get("/", welcome.Welcome)
+
+	return runningTaskService
 }

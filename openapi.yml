@@ -1427,12 +1427,201 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+  /api/v1/timer/run/start:
+    post:
+      tags:
+        - RunningTimer
+      summary: Start or resume a running task timer
+      description: Starts a new running task or resumes a paused task. Automatically pauses any other active task.
+      operationId: startRunningTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunningTaskStartRequest"
+      responses:
+        '200':
+          description: Task started or resumed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunningTaskResponse"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         '500':
           description: Internal server error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/timer/run/stop:
+    post:
+      tags:
+        - RunningTimer
+      summary: Stop a running task timer
+      description: Stops the running task, records duration to database, adds rest time and forward overtime credit if strict.
+      operationId: stopRunningTask
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunningTaskActionRequest"
+      responses:
+        '200':
+          description: Task stopped and recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskRecordResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/timer/run/pause:
+    post:
+      tags:
+        - RunningTimer
+      summary: Pause a running task timer
+      description: Pauses the active running task timer and updates accumulated elapsed time.
+      operationId: pauseRunningTask
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunningTaskActionRequest"
+      responses:
+        '200':
+          description: Task paused successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunningTaskResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/timer/run/resume:
+    post:
+      tags:
+        - RunningTimer
+      summary: Resume a paused task timer
+      description: Resumes a previously paused task timer.
+      operationId: resumeRunningTask
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunningTaskActionRequest"
+      responses:
+        '200':
+          description: Task resumed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunningTaskResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/timer/run/status:
+    get:
+      tags:
+        - RunningTimer
+      summary: Get running task status
+      description: Returns the status of the specified task or the currently active task.
+      operationId: getRunningTaskStatus
+      parameters:
+        - name: task_name
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunningTaskResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/timer/run/list:
+    get:
+      tags:
+        - RunningTimer
+      summary: List all running/paused tasks
+      description: Returns a list of all active or paused running tasks.
+      operationId: listRunningTasks
+      responses:
+        '200':
+          description: List retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunningTaskListResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/timer/run/heartbeat:
+    post:
+      tags:
+        - RunningTimer
+      summary: Client heartbeat ping
+      description: Updates the last heartbeat timestamp for the active running task to prevent lease timeout.
+      operationId: sendTimerHeartbeat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeartbeatRequest"
+      responses:
+        '200':
+          description: Heartbeat acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeartbeatResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/timer/ws:
+    get:
+      tags:
+        - RunningTimer
+      summary: Real-Time Timer WebSocket
+      description: WebSocket stream for real-time timer state updates and heartbeat messaging.
+      operationId: timerWebSocket
+      responses:
+        '101':
+          description: Switching Protocols to WebSocket
 
 components:
   schemas:
@@ -2182,4 +2371,118 @@ components:
         - days
         - weekly_targets
         - weekly_tasks
+
+    RunningTaskStartRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+        role:
+          type: string
+        target_duration:
+          type: integer
+        source_day:
+          type: string
+      required:
+        - task_name
+
+    RunningTaskActionRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+        reason:
+          type: string
+
+    HeartbeatRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+
+    HeartbeatResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        server_time:
+          type: integer
+          description: Unix timestamp in milliseconds
+        data:
+          $ref: "#/components/schemas/RunningTask"
+      required:
+        - status
+        - server_time
+
+    RunningTask:
+      type: object
+      properties:
+        id:
+          type: string
+        task_name:
+          type: string
+        role:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        accumulated:
+          type: integer
+        is_running:
+          type: boolean
+        target_duration:
+          type: integer
+        source_day:
+          type: string
+        last_heartbeat_at:
+          type: string
+          format: date-time
+        deadline_at:
+          type: string
+          format: date-time
+        telegram_message_id:
+          type: integer
+      required:
+        - task_name
+        - role
+        - is_running
+
+    RunningTaskResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        server_time:
+          type: integer
+        data:
+          $ref: "#/components/schemas/RunningTask"
+      required:
+        - status
+
+    RunningTaskListResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        server_time:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RunningTask"
+      required:
+        - status
+        - data
+
+    TaskRecordResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        data:
+          $ref: "#/components/schemas/TaskRecord"
+      required:
+        - status
+        - data
+
 

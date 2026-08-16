@@ -7,6 +7,8 @@ import (
 	"os"
 	"tracker-server/internal/api/routes"
 	"tracker-server/internal/notify/telegram"
+	"tracker-server/internal/realtime"
+	"tracker-server/internal/services"
 	"tracker-server/internal/storage/mongo"
 
 	"tracker-server/config"
@@ -35,7 +37,6 @@ func main() {
 	if err != nil {
 		slog.Error("Can't connect to mongo", "error", err)
 		os.Exit(1)
-
 	}
 	notify := telegram.TelegramNew(cfg.Telegram.APIKey, cfg.Telegram.RoomID)
 
@@ -43,9 +44,17 @@ func main() {
 	// Use the logger middleware
 	app.Use(logger.New(logger.Config{}))
 
-	routes.RegisterRoutes(app, mongoconn, notify, cfg)
+	// Init Realtime Event Hub
+	hub := realtime.NewHub()
+	go hub.Run()
+
+	// Register Routes
+	runningTaskService := routes.RegisterRoutes(app, mongoconn, notify, cfg, hub)
+
+	// Start Background Watchdog Service (Safety Cap 20m, Heartbeat Lease, TargetDuration Reaper)
+	watchdog := services.NewTimerWatchdog(runningTaskService)
+	watchdog.Start(ctx)
 
 	// Start the server
 	log.Fatal(app.Listen(":3000"))
-
 }
