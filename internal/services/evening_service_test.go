@@ -92,3 +92,73 @@ func TestEveningServiceDailyReset(t *testing.T) {
 		t.Errorf("expected 2 candidates available on Day 2, got %d", len(res.Candidates))
 	}
 }
+
+type mockStatStorageWithRecords struct {
+	records []entity.TaskRecord
+}
+
+func (m *mockStatStorageWithRecords) ShowTaskList() ([]entity.TaskResult, error) {
+	return nil, nil
+}
+
+func (m *mockStatStorageWithRecords) GetActiveSchedule() (entity.WeeklySchedule, error) {
+	return entity.WeeklySchedule{
+		Monday: entity.DaySchedule{
+			Tasks: []entity.ScheduleTask{
+				{Name: "work", Role: "work", Time: 270, Priority: 9},
+				{Name: "english", Role: "learn", Time: 20, Priority: 8},
+				{Name: "movies", Role: "rest", Time: 295, Priority: 3},
+				{Name: "telegram", Role: "rest", Time: 215, Priority: 5},
+				{Name: "video", Role: "rest", Time: 245, Priority: 4},
+			},
+		},
+	}, nil
+}
+
+func (m *mockStatStorageWithRecords) GetRecordsForDates(dates []string) ([]entity.TaskRecord, error) {
+	return m.records, nil
+}
+
+func TestEveningServiceLeastDonePriority(t *testing.T) {
+	now := time.Now()
+	weekday := now.Weekday()
+	daysSinceMonday := int(weekday) - 1
+	if daysSinceMonday < 0 {
+		daysSinceMonday = 6
+	}
+	mondayDate := now.AddDate(0, 0, -daysSinceMonday).Format("2 January 2006")
+
+	mockStorage := &mockStatStorageWithRecords{
+		records: []entity.TaskRecord{
+			{Name: "movies", Role: "rest", TimeDuration: 57, Date: mondayDate},
+			{Name: "telegram", Role: "rest", TimeDuration: 4, Date: mondayDate},
+			{Name: "video", Role: "rest", TimeDuration: 127, Date: mondayDate},
+			{Name: "work", Role: "work", TimeDuration: 270, Date: mondayDate},
+		},
+	}
+	statSrv := NewStatisticService(mockStorage)
+	eveningSrv := NewEveningService(statSrv)
+
+	res, err := eveningSrv.GetEveningFocus("", 20)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Telegram was done the least (4 min) -> should be candidate #1
+	if res.CurrentTask.TaskName != "telegram" {
+		t.Errorf("expected current task 'telegram', got '%s'", res.CurrentTask.TaskName)
+	}
+
+	if len(res.Candidates) != 3 {
+		t.Fatalf("expected 3 candidates (excluding work and english), got %d", len(res.Candidates))
+	}
+
+	// Verify order: telegram (4m done) < movies (57m done) < video (127m done)
+	expectedOrder := []string{"telegram", "movies", "video"}
+	for i, exp := range expectedOrder {
+		if res.Candidates[i].TaskName != exp {
+			t.Errorf("candidate[%d]: expected '%s', got '%s'", i, exp, res.Candidates[i].TaskName)
+		}
+	}
+}
+

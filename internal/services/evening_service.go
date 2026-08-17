@@ -53,7 +53,12 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 	}
 	s.mu.Unlock()
 
-	var candidates []entity.EveningFocusCandidate
+	type item struct {
+		candidate entity.EveningFocusCandidate
+		timeDone  int
+	}
+
+	var items []item
 
 	for _, taskTarget := range stats.WeeklyTasks {
 		lowerName := strings.ToLower(taskTarget.Name)
@@ -73,19 +78,31 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 		}
 
 		gap := taskTarget.TimeDuration - taskTarget.TimeDone
-		candidates = append(candidates, entity.EveningFocusCandidate{
-			TaskName:  taskTarget.Name,
-			Role:      taskTarget.Role,
-			WeeklyGap: gap,
-			Priority:  5,
-			IsStrict:  false,
+		items = append(items, item{
+			candidate: entity.EveningFocusCandidate{
+				TaskName:  taskTarget.Name,
+				Role:      taskTarget.Role,
+				WeeklyGap: gap,
+				Priority:  5,
+				IsStrict:  false,
+			},
+			timeDone: taskTarget.TimeDone,
 		})
 	}
 
-	// Sort candidates by highest weekly deficit (gap) descending
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].WeeklyGap > candidates[j].WeeklyGap
+	// Sort candidates by least time done for the week (ascending)
+	// Tie-break by highest remaining weekly deficit (WeeklyGap) descending
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].timeDone != items[j].timeDone {
+			return items[i].timeDone < items[j].timeDone
+		}
+		return items[i].candidate.WeeklyGap > items[j].candidate.WeeklyGap
 	})
+
+	candidates := make([]entity.EveningFocusCandidate, len(items))
+	for i, it := range items {
+		candidates[i] = it.candidate
+	}
 
 	sprintTime := 20
 	if timeOverride > 0 {
