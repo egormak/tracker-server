@@ -27,6 +27,8 @@ tags:
     description: System management operations
   - name: Schedule
     description: Weekly schedule management with automatic rollover logic
+  - name: EveningMode
+    description: Evening Catch-Up micro-sprint mode operations
   - name: General
     description: General API endpoints
 
@@ -1623,6 +1625,85 @@ paths:
         '101':
           description: Switching Protocols to WebSocket
 
+  /api/v1/mode/evening-focus:
+    get:
+      tags:
+        - EveningMode
+      summary: Get Evening Focus Recommendation
+      description: Returns the recommended micro-sprint task for evening catch-up, ranked by least completed time for the week.
+      operationId: getEveningFocus
+      parameters:
+        - name: category
+          in: query
+          description: Optional role filter (e.g. 'learn', 'rest', 'all')
+          required: false
+          schema:
+            type: string
+        - name: time
+          in: query
+          description: Sprint duration override in minutes (default 20)
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successful evening focus recommendation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EveningFocusResponseWrapper"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/mode/evening-focus/skip:
+    post:
+      tags:
+        - EveningMode
+      summary: Skip Evening Focus Task
+      description: Snoozes the specified task for tonight and returns the next recommendation.
+      operationId: skipEveningFocus
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: time
+          in: query
+          required: false
+          schema:
+            type: integer
+      requestBody:
+        description: Task skip request payload
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EveningFocusSkipRequest"
+      responses:
+        '200':
+          description: Successfully skipped task and returned next recommendation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EveningFocusResponseWrapper"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     StatsDone:
@@ -2484,5 +2565,82 @@ components:
       required:
         - status
         - data
+
+    EveningFocusCandidate:
+      type: object
+      properties:
+        task_name:
+          type: string
+          example: "telegram"
+        role:
+          type: string
+          example: "rest"
+        weekly_done:
+          type: integer
+          description: Total minutes completed for this task this week
+          example: 4
+        weekly_target:
+          type: integer
+          description: Total planned minutes for this task this week
+          example: 215
+        weekly_gap:
+          type: integer
+          description: Remaining planned deficit in minutes (weekly_target - weekly_done)
+          example: 211
+        priority:
+          type: integer
+          example: 5
+        is_strict:
+          type: boolean
+          example: false
+      required:
+        - task_name
+        - role
+        - weekly_gap
+
+    EveningFocusResponse:
+      type: object
+      properties:
+        current_task:
+          $ref: "#/components/schemas/EveningFocusCandidate"
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/EveningFocusCandidate"
+        sprint_time:
+          type: integer
+          description: Sprint duration in minutes
+          example: 20
+        rest_pool:
+          type: integer
+          description: Rest pool allowance in minutes
+          example: 10
+      required:
+        - current_task
+        - candidates
+        - sprint_time
+
+    EveningFocusResponseWrapper:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          $ref: "#/components/schemas/EveningFocusResponse"
+      required:
+        - status
+        - data
+
+    EveningFocusSkipRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+          description: Name of the task to snooze for tonight
+          example: "telegram"
+      required:
+        - task_name
+
 
 

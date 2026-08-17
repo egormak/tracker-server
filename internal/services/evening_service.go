@@ -80,11 +80,13 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 		gap := taskTarget.TimeDuration - taskTarget.TimeDone
 		items = append(items, item{
 			candidate: entity.EveningFocusCandidate{
-				TaskName:  taskTarget.Name,
-				Role:      taskTarget.Role,
-				WeeklyGap: gap,
-				Priority:  5,
-				IsStrict:  false,
+				TaskName:     taskTarget.Name,
+				Role:         taskTarget.Role,
+				WeeklyDone:   taskTarget.TimeDone,
+				WeeklyTarget: taskTarget.TimeDuration,
+				WeeklyGap:    gap,
+				Priority:     5,
+				IsStrict:     false,
 			},
 			timeDone: taskTarget.TimeDone,
 		})

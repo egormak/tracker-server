@@ -148,6 +148,15 @@ func TestEveningServiceLeastDonePriority(t *testing.T) {
 	if res.CurrentTask.TaskName != "telegram" {
 		t.Errorf("expected current task 'telegram', got '%s'", res.CurrentTask.TaskName)
 	}
+	if res.CurrentTask.WeeklyDone != 4 {
+		t.Errorf("expected current task weekly_done 4, got %d", res.CurrentTask.WeeklyDone)
+	}
+	if res.CurrentTask.WeeklyTarget != 215 {
+		t.Errorf("expected current task weekly_target 215, got %d", res.CurrentTask.WeeklyTarget)
+	}
+	if res.CurrentTask.WeeklyGap != 211 {
+		t.Errorf("expected current task weekly_gap 211, got %d", res.CurrentTask.WeeklyGap)
+	}
 
 	if len(res.Candidates) != 3 {
 		t.Fatalf("expected 3 candidates (excluding work and english), got %d", len(res.Candidates))
