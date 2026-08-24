@@ -9,17 +9,23 @@ import (
 	"tracker-server/internal/domain/entity"
 )
 
+type RestProvider interface {
+	GetRest() (int, error)
+}
+
 type EveningService struct {
 	statSrv        *StatisticService
+	restSrv        RestProvider
 	snoozedTonight map[string]bool
 	lastResetDate  string
 	nowFunc        func() time.Time
 	mu             sync.Mutex
 }
 
-func NewEveningService(statSrv *StatisticService) *EveningService {
+func NewEveningService(statSrv *StatisticService, restSrv RestProvider) *EveningService {
 	return &EveningService{
 		statSrv:        statSrv,
+		restSrv:        restSrv,
 		snoozedTonight: make(map[string]bool),
 		nowFunc:        time.Now,
 	}
@@ -116,11 +122,19 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 		currentTask = candidates[0]
 	}
 
+	restUnits := 0
+	if s.restSrv != nil {
+		if r, err := s.restSrv.GetRest(); err == nil {
+			restUnits = r
+		}
+	}
+	restPoolMin := restUnits / 100
+
 	return entity.EveningFocusResponse{
 		CurrentTask: currentTask,
 		Candidates:  candidates,
 		SprintTime:  sprintTime,
-		RestPool:    10,
+		RestPool:    restPoolMin,
 	}, nil
 }
 

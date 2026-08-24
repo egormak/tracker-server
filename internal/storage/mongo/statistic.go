@@ -58,3 +58,31 @@ func (s *Storage) GetRecordsForDates(dates []string) ([]entity.TaskRecord, error
 
 	return result, nil
 }
+
+// GetRecordsForDatesOrSourceDays retrieves task records matching either an exact
+// record date (with no source_day) or a rollover source_day, mirroring
+// GetTaskDurationForDate's per-task fallback semantics: a source_day match ignores
+// date, while a date match only applies to records that aren't already a rollover.
+func (s *Storage) GetRecordsForDatesOrSourceDays(dates []string, sourceDays []string) ([]entity.TaskRecord, error) {
+	coll := s.Client.Database(dbName).Collection(tasksList)
+
+	filter := bson.M{
+		"$or": []bson.M{
+			{"date": bson.M{"$in": dates}, "source_day": bson.M{"$in": []interface{}{"", nil}}},
+			{"source_day": bson.M{"$in": sourceDays}},
+		},
+	}
+
+	cursor, err := coll.Find(s.Context, filter)
+	if err != nil {
+		return nil, fmt.Errorf("GetRecordsForDatesOrSourceDays: failed to find records: %w", err)
+	}
+	defer cursor.Close(s.Context)
+
+	var result []entity.TaskRecord
+	if err := cursor.All(s.Context, &result); err != nil {
+		return nil, fmt.Errorf("GetRecordsForDatesOrSourceDays: failed to decode records: %w", err)
+	}
+
+	return result, nil
+}

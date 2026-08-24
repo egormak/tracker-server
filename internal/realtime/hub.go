@@ -16,6 +16,7 @@ const (
 	EventTaskPaused   EventType = "TASK_PAUSED"
 	EventTaskResumed  EventType = "TASK_RESUMED"
 	EventTaskStopped  EventType = "TASK_STOPPED"
+	EventTaskAdjusted EventType = "TASK_ADJUSTED"
 	EventHeartbeatAck EventType = "HEARTBEAT_ACK"
 	EventStateSync    EventType = "STATE_SYNC"
 )

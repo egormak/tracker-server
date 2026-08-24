@@ -28,7 +28,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	if hub != nil {
 		runningTaskService.SetHub(hub)
 	}
-	eveningService := services.NewEveningService(statsService)
+	eveningService := services.NewEveningService(statsService, restService)
 
 	// Handlers
 	// Task
@@ -68,6 +68,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Get("/v1/task/plan/percent", taskRecordHandler.GetTaskPlanPercent)
 	api.Get("/v1/task/plan-percent", taskRecordHandler.GetTaskPlanPercent) // Legacy alias (hyphen instead of slash)
 	api.Get("/v1/task/plan/percent/schedule", taskRecordHandler.GetTaskPlanPercentWithSchedule)
+	api.Post("/v1/task/plan/rotate", taskRecordHandler.ChangeGroupPlanPercent)
 	api.Get("/v1/task/plan-percent/change", taskRecordHandler.ChangeGroupPlanPercent) // Legacy rotation
 	// Rest
 	api.Post("/v1/rest/add", restHandler.RestAdd)
@@ -101,6 +102,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	// Legacy record routes for web UI and CLI
 	api.Get("/v1/records", taskRecordHandler.ShowRecords)
+	api.Post("/v1/records/clean", taskRecordHandler.CleanRecords)
 	api.Get("/v1/records/clean", taskRecordHandler.CleanRecords)
 
 	// Roles
@@ -122,6 +124,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Schedule
 	api.Post("/v1/schedule", scheduleHandler.CreateSchedule)
 	api.Get("/v1/schedule/active", scheduleHandler.GetActiveSchedule)
+	api.Patch("/v1/schedule/active/task-time", scheduleHandler.UpdateTaskTime)
 	api.Get("/v1/schedule/active/today", scheduleHandler.GetTodaySchedule)
 	api.Get("/v1/schedule/active/rollover", scheduleHandler.GetRolloverTasks)
 	api.Post("/v1/schedule/apply", scheduleHandler.ApplySchedule)
@@ -135,6 +138,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/timer/run/stop", runningTaskHandler.Stop)
 	api.Post("/v1/timer/run/pause", runningTaskHandler.Pause)
 	api.Post("/v1/timer/run/resume", runningTaskHandler.Resume)
+	api.Post("/v1/timer/run/adjust", runningTaskHandler.Adjust)
 	api.Get("/v1/timer/run/status", runningTaskHandler.Status)
 	api.Get("/v1/timer/run/list", runningTaskHandler.List)
 	api.Post("/v1/timer/run/heartbeat", runningTaskHandler.Heartbeat)

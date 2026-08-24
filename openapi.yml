@@ -300,6 +300,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/task/plan/rotate:
+    post:
+      tags:
+        - Task
+        - TaskRecord
+      summary: Rotate plan percent group
+      description: Advances plan percent group rotation to the next configured group.
+      operationId: rotatePlanPercent
+      responses:
+        '200':
+          description: Group rotated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/record/params:
     get:
       deprecated: true
@@ -727,6 +749,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/schedule/active/task-time:
+    patch:
+      tags:
+        - Schedule
+      summary: Update task scheduled time atomically
+      description: Atomically updates or adjusts scheduled minutes for a task in the active schedule.
+      operationId: updateScheduleTaskTime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScheduleTaskTimeRequest"
+      responses:
+        '200':
+          description: Schedule task time updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/WeeklySchedule"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/schedule/active/today:
     get:
       tags:
@@ -1123,12 +1186,30 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/records/clean:
-    get:
-      deprecated: true
+    post:
       tags:
         - TaskRecord
       summary: Clean all records (dev)
       operationId: cleanRecords
+      responses:
+        '200':
+          description: Cleaned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      deprecated: true
+      tags:
+        - TaskRecord
+      summary: Clean all records (legacy dev GET)
+      operationId: cleanRecordsLegacy
       responses:
         '200':
           description: Cleaned
@@ -1540,6 +1621,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/timer/run/adjust:
+    post:
+      tags:
+        - RunningTimer
+      summary: Adjust active running task duration
+      description: Atomically extends or shortens the target duration and dynamically shifts deadline of an active running task.
+      operationId: adjustRunningTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustRunningTaskRequest"
+      responses:
+        '200':
+          description: Task duration adjusted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunningTaskResponse"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/timer/run/status:
     get:
       tags:
@@ -1706,6 +1820,44 @@ paths:
 
 components:
   schemas:
+    UpdateScheduleTaskTimeRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+          description: Task name
+        minutes:
+          type: integer
+          description: Absolute scheduled minutes
+        delta_minutes:
+          type: integer
+          description: Relative delta in minutes (+/-)
+        day:
+          type: string
+          description: "Target day: today, all, or weekday name"
+      required:
+        - task_name
+      example:
+        task_name: "work"
+        delta_minutes: 15
+        day: "today"
+
+    AdjustRunningTaskRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+          description: Task name
+        delta_minutes:
+          type: integer
+          description: Minutes to add or subtract
+      required:
+        - task_name
+        - delta_minutes
+      example:
+        task_name: "coding"
+        delta_minutes: 5
+
     StatsDone:
       type: object
       properties:

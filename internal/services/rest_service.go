@@ -68,3 +68,8 @@ func (r *RestService) RestGet() (int, error) {
 
 	return restTime, nil
 }
+
+// GetRest retrieves the current rest time
+func (r *RestService) GetRest() (int, error) {
+	return r.RestGet()
+}

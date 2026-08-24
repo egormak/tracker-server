@@ -107,6 +107,29 @@ func (h *RunningTaskHandler) Resume(c *fiber.Ctx) error {
 	})
 }
 
+func (h *RunningTaskHandler) Adjust(c *fiber.Ctx) error {
+	slog.Info("RunningTaskHandler.Adjust")
+
+	var body struct {
+		TaskName     string `json:"task_name"`
+		DeltaMinutes int    `json:"delta_minutes"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(400).JSON(fiber.Map{"status": "error", "message": err.Error()})
+	}
+
+	task, err := h.service.Adjust(body.TaskName, body.DeltaMinutes)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
+	}
+
+	return c.Status(200).JSON(fiber.Map{
+		"status":      "success",
+		"server_time": time.Now().UnixMilli(),
+		"data":        task,
+	})
+}
+
 func (h *RunningTaskHandler) Status(c *fiber.Ctx) error {
 	taskName := c.Query("task_name")
 	task, err := h.service.GetStatus(taskName)

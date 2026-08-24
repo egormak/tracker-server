@@ -243,3 +243,30 @@ func (h *ScheduleHandler) ApplySchedule(c *fiber.Ctx) error {
 		"message": "Schedule applied successfully for today",
 	})
 }
+
+// UpdateTaskTime handles PATCH /api/v1/schedule/active/task-time
+func (h *ScheduleHandler) UpdateTaskTime(c *fiber.Ctx) error {
+	var request entity.UpdateScheduleTaskTimeRequest
+	if err := c.BodyParser(&request); err != nil {
+		slog.Error("Failed to parse update task time request", "error", err)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Invalid request format",
+		})
+	}
+
+	updatedSchedule, err := h.service.UpdateTaskTime(request)
+	if err != nil {
+		slog.Error("Failed to update schedule task time", "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "Schedule task time updated successfully",
+		"data":    updatedSchedule,
+	})
+}

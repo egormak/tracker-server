@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -42,6 +43,7 @@ type ScheduleStorage interface {
 	// Task operations needed for rollover calculations
 	GetTodayTaskDuration(taskName string) (int, error)
 	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
+	GetRecordsForDatesOrSourceDays(dates []string, sourceDays []string) ([]entity.TaskRecord, error)
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	CreateTask(taskDefinition entity.TaskDefinition) error
 	GetTaskNamesForDate(date string) ([]string, error)
@@ -157,6 +159,120 @@ func (s *ScheduleService) SetActiveSchedule(id string) error {
 	return nil
 }
 
+// UpdateTaskTime updates or shifts the time of a task in the active schedule
+func (s *ScheduleService) UpdateTaskTime(req entity.UpdateScheduleTaskTimeRequest) (*entity.WeeklySchedule, error) {
+	if req.TaskName == "" {
+		return nil, fmt.Errorf("task_name is required")
+	}
+	if req.Minutes == nil && req.DeltaMinutes == nil {
+		return nil, fmt.Errorf("either minutes or delta_minutes must be provided")
+	}
+
+	normalizedDay := strings.ToLower(strings.TrimSpace(req.Day))
+	if normalizedDay == "" || normalizedDay == "today" {
+		normalizedDay = strings.ToLower(time.Now().Weekday().String())
+	}
+
+	allDays := []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+	var targetDays []string
+	if normalizedDay == "all" || normalizedDay == "week" || normalizedDay == "everyday" {
+		targetDays = allDays
+	} else {
+		targetDays = []string{normalizedDay}
+	}
+
+	updateDaySchedule := func(daySched *entity.DaySchedule) bool {
+		found := false
+		for i := range daySched.Tasks {
+			if strings.EqualFold(daySched.Tasks[i].Name, req.TaskName) {
+				newTime := daySched.Tasks[i].Time
+				if req.Minutes != nil {
+					newTime = *req.Minutes
+				} else if req.DeltaMinutes != nil {
+					newTime += *req.DeltaMinutes
+				}
+				if newTime < 0 {
+					newTime = 0
+				}
+				daySched.Tasks[i].Time = newTime
+				found = true
+				break
+			}
+		}
+		if found {
+			total := 0
+			for _, t := range daySched.Tasks {
+				total += t.Time
+			}
+			daySched.TotalTime = total
+		}
+		return found
+	}
+
+	// Optimistic-concurrency retry loop: re-read the active schedule fresh on every
+	// attempt so a concurrent write (another PATCH, or a full-schedule PUT) is never
+	// silently overwritten — a version conflict re-applies this mutation on top of
+	// the latest data instead of clobbering it.
+	const maxAttempts = 5
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		activeSchedule, err := s.st.GetActiveSchedule()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get active schedule: %w", err)
+		}
+
+		updatedAny := false
+		for _, day := range targetDays {
+			switch day {
+			case "monday":
+				if updateDaySchedule(&activeSchedule.Monday) {
+					updatedAny = true
+				}
+			case "tuesday":
+				if updateDaySchedule(&activeSchedule.Tuesday) {
+					updatedAny = true
+				}
+			case "wednesday":
+				if updateDaySchedule(&activeSchedule.Wednesday) {
+					updatedAny = true
+				}
+			case "thursday":
+				if updateDaySchedule(&activeSchedule.Thursday) {
+					updatedAny = true
+				}
+			case "friday":
+				if updateDaySchedule(&activeSchedule.Friday) {
+					updatedAny = true
+				}
+			case "saturday":
+				if updateDaySchedule(&activeSchedule.Saturday) {
+					updatedAny = true
+				}
+			case "sunday":
+				if updateDaySchedule(&activeSchedule.Sunday) {
+					updatedAny = true
+				}
+			}
+		}
+
+		if !updatedAny {
+			return nil, fmt.Errorf("task '%s' not found in schedule for day(s) '%s'", req.TaskName, req.Day)
+		}
+
+		activeSchedule.UpdatedAt = time.Now().Format("2 January 2006")
+		if err := s.st.UpdateSchedule(activeSchedule.ID, activeSchedule); err != nil {
+			if errors.Is(err, entity.ErrScheduleVersionConflict) {
+				continue
+			}
+			return nil, fmt.Errorf("failed to save updated schedule: %w", err)
+		}
+
+		slog.Info("Updated schedule task time", "task", req.TaskName, "day", req.Day, "attempt", attempt)
+		return &activeSchedule, nil
+	}
+
+	return nil, fmt.Errorf("failed to update schedule task time for '%s' after %d attempts due to concurrent updates", req.TaskName, maxAttempts)
+}
+
 // GetTodaySchedule returns today's schedule with rollover tasks
 func (s *ScheduleService) GetTodaySchedule() (*entity.ActiveSchedule, error) {
 	today := strings.ToLower(time.Now().Weekday().String())
@@ -220,17 +336,59 @@ func (s *ScheduleService) GetRolloverTasks(currentDay string) ([]entity.Rollover
 func (s *ScheduleService) buildTaskDayDeficits(schedule entity.WeeklySchedule, previousDays []string, referenceDate time.Time) map[string]map[string]*dayDeficitInfo {
 	taskDayDeficits := make(map[string]map[string]*dayDeficitInfo)
 
+	// Collect all dates for the previous days
+	dates := make([]string, len(previousDays))
+	lowerDays := make([]string, len(previousDays))
+	dayToDate := make(map[string]string, len(previousDays))
+	for i, day := range previousDays {
+		d := s.getDateForDay(day, referenceDate)
+		dates[i] = d
+		lowerDays[i] = strings.ToLower(day)
+		dayToDate[strings.ToLower(day)] = d
+	}
+
+	// Batch fetch records for all previous days in a single query. Matching by
+	// source_day (not just date) is required so a task rolled over from an earlier
+	// day and completed later isn't missed, mirroring GetTaskDurationForDate's fallback.
+	records, err := s.st.GetRecordsForDatesOrSourceDays(dates, lowerDays)
+	useBatch := err == nil
+
+	// Map of taskName -> sourceDay/date -> totalDone
+	batchDoneMap := make(map[string]map[string]int)
+	if useBatch {
+		for _, rec := range records {
+			tName := strings.ToLower(rec.Name)
+			if batchDoneMap[tName] == nil {
+				batchDoneMap[tName] = make(map[string]int)
+			}
+			if rec.SourceDay != "" {
+				batchDoneMap[tName][strings.ToLower(rec.SourceDay)] += rec.TimeDuration
+			} else if rec.Date != "" {
+				batchDoneMap[tName][rec.Date] += rec.TimeDuration
+			}
+		}
+	}
+
 	// Process each day separately
 	for _, day := range previousDays {
 		daySchedule := s.getDayScheduleFromWeekly(schedule, day)
-		dayDate := s.getDateForDay(day, referenceDate)
+		dayDate := dayToDate[strings.ToLower(day)]
+		lowerDay := strings.ToLower(day)
 
 		// For each task scheduled on this day
 		for _, task := range daySchedule.Tasks {
-			// Get actual work done on this specific day
-			timeDone, err := s.st.GetTaskDurationForDate(task.Name, dayDate, day)
-			if err != nil {
-				timeDone = 0
+			var timeDone int
+			if useBatch {
+				tName := strings.ToLower(task.Name)
+				if m, ok := batchDoneMap[tName]; ok {
+					timeDone = m[lowerDay] + m[dayDate]
+				}
+			} else {
+				var err error
+				timeDone, err = s.st.GetTaskDurationForDate(task.Name, dayDate, day)
+				if err != nil {
+					timeDone = 0
+				}
 			}
 
 			// Calculate deficit for this specific day

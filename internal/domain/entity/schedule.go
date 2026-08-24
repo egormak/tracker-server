@@ -1,5 +1,11 @@
 package entity
 
+import "errors"
+
+// ErrScheduleVersionConflict signals that a schedule write lost an optimistic-concurrency
+// race: the document's version no longer matches what the caller read before mutating it.
+var ErrScheduleVersionConflict = errors.New("schedule was modified concurrently, please retry")
+
 // DaySchedule represents tasks scheduled for a specific day of the week
 type DaySchedule struct {
 	Day       string         `json:"day" bson:"day"`               // "monday", "tuesday", etc.
@@ -20,10 +26,11 @@ type ScheduleTask struct {
 // WeeklySchedule represents the full weekly schedule configuration
 type WeeklySchedule struct {
 	ID        string      `json:"id,omitempty" bson:"_id,omitempty"`
-	Title     string      `json:"title" bson:"title"`           // "Weekly Schedule"
-	CreatedAt string      `json:"created_at" bson:"created_at"` // Date created
-	UpdatedAt string      `json:"updated_at" bson:"updated_at"` // Date last updated
-	IsActive  bool        `json:"is_active" bson:"is_active"`   // Whether this schedule is active
+	Title     string      `json:"title" bson:"title"`               // "Weekly Schedule"
+	CreatedAt string      `json:"created_at" bson:"created_at"`     // Date created
+	UpdatedAt string      `json:"updated_at" bson:"updated_at"`     // Date last updated
+	IsActive  bool        `json:"is_active" bson:"is_active"`       // Whether this schedule is active
+	Version   int         `json:"version,omitempty" bson:"version"` // Optimistic-concurrency version, bumped on every write
 	Monday    DaySchedule `json:"monday" bson:"monday"`
 	Tuesday   DaySchedule `json:"tuesday" bson:"tuesday"`
 	Wednesday DaySchedule `json:"wednesday" bson:"wednesday"`
@@ -67,4 +74,12 @@ type ActiveSchedule struct {
 	Tasks         []ScheduleTask `json:"tasks"`          // Today's scheduled tasks
 	RolloverTasks []RolloverTask `json:"rollover_tasks"` // Incomplete tasks from previous days
 	PlanGroup     []string       `json:"plan_group"`
+}
+
+// UpdateScheduleTaskTimeRequest represents a request to update or shift a task's scheduled duration
+type UpdateScheduleTaskTimeRequest struct {
+	TaskName     string `json:"task_name"`
+	Minutes      *int   `json:"minutes,omitempty"`
+	DeltaMinutes *int   `json:"delta_minutes,omitempty"`
+	Day          string `json:"day"` // "today", "all", or weekday name like "monday"
 }

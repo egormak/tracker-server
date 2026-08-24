@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	DefaultSafetyCapMinutes   = 20
-	DefaultHeartbeatLease     = 3 * time.Minute
-	WatchdogCheckInterval     = 10 * time.Second
+	DefaultSafetyCapMinutes = 20
+	DefaultHeartbeatLease   = 3 * time.Minute
+	WatchdogCheckInterval   = 10 * time.Second
 )
 
 type TimerWatchdog struct {

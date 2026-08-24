@@ -27,10 +27,19 @@ func (m *mockStatStorage) GetRecordsForDates(dates []string) ([]entity.TaskRecor
 	return nil, nil
 }
 
+type mockRestProvider struct {
+	restUnits int
+}
+
+func (m *mockRestProvider) GetRest() (int, error) {
+	return m.restUnits, nil
+}
+
 func TestEveningServiceDailyReset(t *testing.T) {
 	mockStorage := &mockStatStorage{}
 	statSrv := NewStatisticService(mockStorage)
-	eveningSrv := NewEveningService(statSrv)
+	mockRest := &mockRestProvider{restUnits: 1500} // 1500 units = 15 min
+	eveningSrv := NewEveningService(statSrv, mockRest)
 
 	// Mock time starting on 2026-08-12
 	currentTime := time.Date(2026, 8, 12, 20, 0, 0, 0, time.UTC)
@@ -45,6 +54,9 @@ func TestEveningServiceDailyReset(t *testing.T) {
 	}
 	if res.CurrentTask.TaskName != "movies" {
 		t.Errorf("expected current task 'movies', got '%s'", res.CurrentTask.TaskName)
+	}
+	if res.RestPool != 15 {
+		t.Errorf("expected RestPool to be 15 min (from 1500 units), got %d", res.RestPool)
 	}
 
 	// 2. Skip 'movies' on Day 1
@@ -137,7 +149,7 @@ func TestEveningServiceLeastDonePriority(t *testing.T) {
 		},
 	}
 	statSrv := NewStatisticService(mockStorage)
-	eveningSrv := NewEveningService(statSrv)
+	eveningSrv := NewEveningService(statSrv, nil)
 
 	res, err := eveningSrv.GetEveningFocus("", 20)
 	if err != nil {
@@ -170,4 +182,3 @@ func TestEveningServiceLeastDonePriority(t *testing.T) {
 		}
 	}
 }
-

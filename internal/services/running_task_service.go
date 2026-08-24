@@ -162,22 +162,7 @@ func (s *RunningTaskService) Stop(taskName string, reasons ...string) (entity.Ta
 		reason = reasons[0]
 	}
 
-	var task entity.RunningTask
-	var err error
-
-	if taskName != "" {
-		task, err = s.st.GetRunningTask(taskName)
-	} else {
-		task, err = s.st.GetActiveRunningTask()
-		if err != nil || task.TaskName == "" {
-			tasks, errAll := s.st.GetAllRunningTasks()
-			if errAll == nil && len(tasks) > 0 {
-				task = tasks[0]
-				err = nil
-			}
-		}
-	}
-
+	task, err := s.resolveTaskOrActive(taskName)
 	if err != nil {
 		return entity.TaskRecord{}, fmt.Errorf("failed to get task: %w", err)
 	}
@@ -442,6 +427,24 @@ func (s *RunningTaskService) Heartbeat(taskName string) (entity.RunningTask, err
 	return task, nil
 }
 
+// resolveTaskOrActive resolves the task a caller means by name, falling back to
+// the currently active running task, and finally to any running task at all.
+// Shared by Stop and Adjust so their fallback order can't drift apart.
+func (s *RunningTaskService) resolveTaskOrActive(taskName string) (entity.RunningTask, error) {
+	if taskName != "" {
+		return s.st.GetRunningTask(taskName)
+	}
+
+	task, err := s.st.GetActiveRunningTask()
+	if err != nil || task.TaskName == "" {
+		tasks, errAll := s.st.GetAllRunningTasks()
+		if errAll == nil && len(tasks) > 0 {
+			return tasks[0], nil
+		}
+	}
+	return task, err
+}
+
 func (s *RunningTaskService) GetStatus(taskName string) (entity.RunningTask, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -458,6 +461,53 @@ func (s *RunningTaskService) GetStatus(taskName string) (entity.RunningTask, err
 		return tasks[0], nil
 	}
 	return entity.RunningTask{}, nil
+}
+
+func (s *RunningTaskService) Adjust(taskName string, deltaMinutes int) (entity.RunningTask, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, err := s.resolveTaskOrActive(taskName)
+	if err != nil {
+		return entity.RunningTask{}, fmt.Errorf("failed to get task: %w", err)
+	}
+	if task.TaskName == "" {
+		return entity.RunningTask{}, fmt.Errorf("no running task found to adjust")
+	}
+
+	newTarget := task.TargetDuration + deltaMinutes
+	if newTarget < 0 {
+		newTarget = 0
+	}
+	task.TargetDuration = newTarget
+
+	now := time.Now()
+	if task.IsRunning && task.TargetDuration > 0 {
+		elapsedMin := task.Accumulated + int(now.Sub(task.StartTime).Minutes())
+		remainingMin := task.TargetDuration - elapsedMin
+		if remainingMin > 0 {
+			task.DeadlineAt = now.Add(time.Duration(remainingMin) * time.Minute)
+		}
+		// remainingMin <= 0 (already overtime): leave DeadlineAt untouched, matching
+		// Start's and Resume's identical remaining-time recompute.
+	} else {
+		task.DeadlineAt = time.Time{}
+	}
+
+	if err := s.st.UpsertRunningTask(task); err != nil {
+		return entity.RunningTask{}, err
+	}
+
+	s.broadcastEvent(realtime.Event{
+		Type:     realtime.EventTaskAdjusted,
+		TaskName: task.TaskName,
+		Role:     task.Role,
+		Duration: task.TargetDuration,
+		Reason:   fmt.Sprintf("adjusted_%d", deltaMinutes),
+		Data:     task,
+	})
+
+	return task, nil
 }
 
 func (s *RunningTaskService) GetAllTasks() ([]entity.RunningTask, error) {

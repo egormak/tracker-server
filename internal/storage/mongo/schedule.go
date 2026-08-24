@@ -23,6 +23,7 @@ func (s *Storage) CreateSchedule(schedule entity.WeeklySchedule) (string, error)
 	now := time.Now().Format("2 January 2006")
 	schedule.CreatedAt = now
 	schedule.UpdatedAt = now
+	schedule.Version = 1
 
 	// If this is set as active, deactivate all others first
 	if schedule.IsActive {
@@ -131,7 +132,21 @@ func (s *Storage) UpdateSchedule(id string, schedule entity.WeeklySchedule) erro
 		}
 	}
 
+	// Optimistic concurrency: only apply this write if the document's version still
+	// matches what the caller read before mutating it in memory. A mismatch means
+	// another write raced in between, and we must not silently overwrite it.
+	// Pre-migration documents have no "version" field at all (treated as version 0).
+	expectedVersion := schedule.Version
 	filter := bson.M{"_id": objectID}
+	if expectedVersion == 0 {
+		filter["$or"] = []bson.M{
+			{"version": bson.M{"$exists": false}},
+			{"version": 0},
+		}
+	} else {
+		filter["version"] = expectedVersion
+	}
+
 	// Build update document without _id field
 	update := bson.M{
 		"$set": bson.M{
@@ -145,6 +160,7 @@ func (s *Storage) UpdateSchedule(id string, schedule entity.WeeklySchedule) erro
 			"saturday":   schedule.Saturday,
 			"sunday":     schedule.Sunday,
 			"updated_at": schedule.UpdatedAt,
+			"version":    expectedVersion + 1,
 		},
 	}
 
@@ -154,7 +170,11 @@ func (s *Storage) UpdateSchedule(id string, schedule entity.WeeklySchedule) erro
 	}
 
 	if result.MatchedCount == 0 {
-		return fmt.Errorf("schedule not found")
+		// Distinguish "document doesn't exist" from "version changed underneath us".
+		if _, err := s.GetSchedule(id); err != nil {
+			return fmt.Errorf("schedule not found")
+		}
+		return entity.ErrScheduleVersionConflict
 	}
 
 	return nil

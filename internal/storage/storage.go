@@ -6,6 +6,7 @@ type Storage interface {
 	RestSpend(restTime int) error
 	GetRecords() ([]entity.TaskRecord, error)
 	GetRecordsForDates(dates []string) ([]entity.TaskRecord, error)
+	GetRecordsForDatesOrSourceDays(dates []string, sourceDays []string) ([]entity.TaskRecord, error)
 	GetDayTaskRecord(taskName string) (int, error)
 	StatisticRolesGet() ([]entity.RoleRecord, error)
 	StatisticRolesGetToday() ([]entity.RoleRecord, error)
