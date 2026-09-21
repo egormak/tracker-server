@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 	"tracker-server/internal/domain/entity"
@@ -49,28 +50,24 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 
 	now := time.Now()
 
-	// Check if this task already exists
+	// If this exact task is already running, return it immediately
 	existing, err := s.st.GetRunningTask(taskName)
+	if err == nil && existing.TaskName != "" && existing.IsRunning {
+		return existing, nil // Already running
+	}
+
+	// Seamless 1-click task switching: if activeTask is running and activeTask.TaskName != taskName,
+	// auto-stop the running task with reason "switched" before starting taskName!
+	active, errActive := s.st.GetActiveRunningTask()
+	if errActive == nil && active.TaskName != "" && active.TaskName != taskName && active.IsRunning {
+		if _, err := s.stopLocked(active.TaskName, "switched"); err != nil {
+			slog.Error("RunningTaskService: failed to auto-stop running task during seamless switch", "task", active.TaskName, "error", err)
+			return entity.RunningTask{}, fmt.Errorf("failed to auto-stop task '%s' for seamless switch: %w", active.TaskName, err)
+		}
+	}
+
+	// Resume existing paused task if it already exists
 	if err == nil && existing.TaskName != "" {
-		if existing.IsRunning {
-			return existing, nil // Already running
-		}
-		// Resume paused task
-		// First, pause any other currently running task
-		active, errActive := s.st.GetActiveRunningTask()
-		if errActive == nil && active.TaskName != "" && active.TaskName != taskName {
-			active.Accumulated += int(now.Sub(active.StartTime).Minutes())
-			active.IsRunning = false
-			active.DeadlineAt = time.Time{}
-			_ = s.st.UpsertRunningTask(active)
-			s.broadcastEvent(realtime.Event{
-				Type:     realtime.EventTaskPaused,
-				TaskName: active.TaskName,
-				Role:     active.Role,
-				Reason:   "switch_task",
-				Data:     active,
-			})
-		}
 		existing.StartTime = now
 		existing.LastHeartbeatAt = now
 		existing.IsRunning = true
@@ -91,22 +88,6 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 			Data:     existing,
 		})
 		return existing, nil
-	}
-
-	// Starting a new task. Pause any currently active running task first.
-	active, errActive := s.st.GetActiveRunningTask()
-	if errActive == nil && active.TaskName != "" {
-		active.Accumulated += int(now.Sub(active.StartTime).Minutes())
-		active.IsRunning = false
-		active.DeadlineAt = time.Time{}
-		_ = s.st.UpsertRunningTask(active)
-		s.broadcastEvent(realtime.Event{
-			Type:     realtime.EventTaskPaused,
-			TaskName: active.TaskName,
-			Role:     active.Role,
-			Reason:   "switch_task",
-			Data:     active,
-		})
 	}
 
 	if role == "" {
@@ -156,7 +137,10 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 func (s *RunningTaskService) Stop(taskName string, reasons ...string) (entity.TaskRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.stopLocked(taskName, reasons...)
+}
 
+func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (entity.TaskRecord, error) {
 	reason := "manual"
 	if len(reasons) > 0 && reasons[0] != "" {
 		reason = reasons[0]
@@ -205,6 +189,7 @@ func (s *RunningTaskService) Stop(taskName string, reasons ...string) (entity.Ta
 						TimeDuration: overtime,
 						Date:         tomorrowDate,
 						SourceDay:    tomorrowDay,
+						CreatedAt:    time.Now().UTC(),
 					}
 
 					if err := s.st.AddTaskRecord(overtimeRecord); err == nil {
@@ -228,6 +213,7 @@ func (s *RunningTaskService) Stop(taskName string, reasons ...string) (entity.Ta
 		TimeDuration: duration,
 		Date:         recordDate,
 		SourceDay:    task.SourceDay,
+		CreatedAt:    time.Now().UTC(),
 	}
 
 	if duration > 0 {

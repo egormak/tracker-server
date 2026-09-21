@@ -4,6 +4,7 @@ import "tracker-server/internal/domain/entity"
 
 type Storage interface {
 	RestSpend(restTime int) error
+	RestSpendUnits(units int) error
 	GetRecords() ([]entity.TaskRecord, error)
 	GetRecordsForDates(dates []string) ([]entity.TaskRecord, error)
 	GetRecordsForDatesOrSourceDays(dates []string, sourceDays []string) ([]entity.TaskRecord, error)
@@ -25,7 +26,11 @@ type Storage interface {
 	AddRoleMinutes(task entity.TaskRecord) error
 	GetRole(taskName string) (string, error)
 	AddRest(restTime int) error
+	AddRestMinutes(minutes int) error
+	AddRestUnits(units int) error
+	AddTaskEarnedRest(workMinutes int) error
 	GetRest() (int, error)
+	ResetRest() error
 	ProcentsSet(procentM entity.PlanPercents) error
 	GetPlanProcents() (entity.PlanPercents, error)
 	GetGroupPlanPercent() (int, error)
@@ -37,6 +42,7 @@ type Storage interface {
 	CheckIfPlanPercentEmpty() error
 	GetGroupName(groupNameOrdinal int) (string, error)
 	GetTodayTaskDuration(taskName string) (int, error)
+	GetTodayTaskDurationsMap(date string) (map[string]int, error)
 	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
 	IsTaskStrict(taskName string) (bool, error)
 	// GetTaskRecordToday(opts ...TaskRecordOption) ([]TaskRecord, error)

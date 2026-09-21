@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"tracker-server/internal/domain/entity"
@@ -37,28 +38,88 @@ func (s *Storage) GetRecords() ([]entity.TaskRecord, error) {
 }
 
 func (s *Storage) CleanRecords() {
-
-	// Set Value for DB
 	database := s.Client.Database(dbName)
 
 	collRoleInfo := database.Collection(roleInfo)
 	collTaskInfo := database.Collection(taskInfo)
 	collTasks := database.Collection(tasksList)
+	collRunning := database.Collection(runningTaskCollection)
 
-	collRoleInfo.Drop(s.Context)
-	collTaskInfo.Drop(s.Context)
-	collTasks.Drop(s.Context)
+	// Replace Drop with DeleteMany to preserve collection indexes!
+	if _, err := collTasks.DeleteMany(s.Context, bson.M{}); err != nil {
+		slog.Error("clean-records: failed to delete tasks", "error", err)
+	}
 
+	// Flush running_task collection to remove stale zombie timers across weeks!
+	if _, err := collRunning.DeleteMany(s.Context, bson.M{}); err != nil {
+		slog.Error("clean-records: failed to delete running tasks", "error", err)
+	}
+
+	// In task_info, reset Rest count to 0 while preserving Procent Info and Day List!
+	today := time.Now().Format("2 January 2006")
+	if _, err := collTaskInfo.UpdateOne(
+		s.Context,
+		bson.M{"title": restDocName},
+		bson.M{"$set": bson.M{"restcount": 0, "date": today}},
+		options.Update().SetUpsert(true),
+	); err != nil {
+		slog.Error("clean-records: failed to reset rest count in task_info", "error", err)
+	}
+
+	// In role_info: reset via DeleteMany
+	if _, err := collRoleInfo.DeleteMany(s.Context, bson.M{}); err != nil {
+		slog.Error("clean-records: failed to delete role_info", "error", err)
+	}
+}
+
+type taskDurationAggResult struct {
+	Name  string `bson:"_id"`
+	Total int    `bson:"total"`
+}
+
+// GetTodayTaskDurationsMap returns a map of task name to total duration for the given date using an aggregation pipeline.
+func (s *Storage) GetTodayTaskDurationsMap(date string) (map[string]int, error) {
+	database := s.Client.Database(dbName)
+	coll := database.Collection(tasksList)
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"date": date}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":   "$name",
+			"total": bson.M{"$sum": "$time_duration"},
+		}}},
+	}
+
+	cursor, err := coll.Aggregate(s.Context, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("get-today-task-durations-map: %w", err)
+	}
+	defer cursor.Close(s.Context)
+
+	durations := make(map[string]int)
+	for cursor.Next(s.Context) {
+		var agg taskDurationAggResult
+		if err := cursor.Decode(&agg); err != nil {
+			return nil, fmt.Errorf("get-today-task-durations-map decode: %w", err)
+		}
+		durations[agg.Name] = agg.Total
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("get-today-task-durations-map cursor error: %w", err)
+	}
+
+	return durations, nil
 }
 
 func (s *Storage) ShowTaskList() ([]entity.TaskResult, error) {
-
 	var taskDefinitions []entity.TaskDefinition
-	var taskResults []entity.TaskResult
+	taskResults := make([]entity.TaskResult, 0)
 	database := s.Client.Database(dbName)
 	coll := database.Collection(taskNamesList)
 
-	cursor, err := coll.Find(s.Context, bson.M{"date": time.Now().Format("2 January 2006")})
+	today := time.Now().Format("2 January 2006")
+	cursor, err := coll.Find(s.Context, bson.M{"date": today})
 	if err != nil {
 		return nil, fmt.Errorf("show-task-list: %w", err)
 	}
@@ -73,22 +134,23 @@ func (s *Storage) ShowTaskList() ([]entity.TaskResult, error) {
 		taskDefinitions = append(taskDefinitions, taskDef)
 	}
 
+	// Single aggregation pipeline query replacing N+1 per-task queries
+	durationsMap, err := s.GetTodayTaskDurationsMap(today)
+	if err != nil {
+		return nil, fmt.Errorf("show-task-list durations: %w", err)
+	}
+
 	for _, taskData := range taskDefinitions {
-		timeDuration, err := s.GetTodayTaskDuration(taskData.Name)
-		if err != nil {
-			return nil, fmt.Errorf("show-task-list: %w", err)
-		}
 		taskResults = append(taskResults, entity.TaskResult{
 			Name:         taskData.Name,
 			Role:         taskData.Role,
 			TimeDuration: taskData.TimeSchedule,
-			TimeDone:     timeDuration,
+			TimeDone:     durationsMap[taskData.Name],
 			Priority:     taskData.Priority,
 		})
 	}
 
 	return taskResults, nil
-
 }
 
 func (s *Storage) GetTodayTaskDuration(taskName string) (int, error) {
@@ -119,22 +181,51 @@ func (s *Storage) GetTodayTaskDuration(taskName string) (int, error) {
 
 }
 
-// GetTaskDurationForDate gets the total duration for a task on a specific date and source day
+// getWeekDates returns all 7 date strings (Monday to Sunday) for the calendar week containing dateStr.
+// If dateStr cannot be parsed using "2 January 2006", it returns []string{dateStr}.
+func getWeekDates(dateStr string) []string {
+	parsed, err := time.Parse("2 January 2006", dateStr)
+	if err != nil {
+		return []string{dateStr}
+	}
+	weekday := parsed.Weekday()
+	daysSinceMonday := int(weekday) - 1
+	if daysSinceMonday < 0 {
+		daysSinceMonday = 6 // Sunday is day 6 relative to Monday
+	}
+	monday := parsed.AddDate(0, 0, -daysSinceMonday)
+	weekDates := make([]string, 7)
+	for i := 0; i < 7; i++ {
+		weekDates[i] = monday.AddDate(0, 0, i).Format("2 January 2006")
+	}
+	return weekDates
+}
+
+// GetTaskDurationForDate gets the total duration for a task on a specific date and source day.
+// Rollover source_day matches are strictly bounded to the week of the queried date,
+// preventing unbounded historical over-crediting from prior weeks.
 func (s *Storage) GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error) {
 	var timeDuration int
 
 	database := s.Client.Database(dbName)
 	coll := database.Collection(tasksList)
 
-	// Query for records that belong to this date/day:
-	// - either source_day matches the rollover source day (if sourceDay is set)
-	// - or date matches and source_day is empty/nil (not rolled over)
-	filter := bson.M{
-		"name": taskName,
-		"$or": []bson.M{
-			{"source_day": strings.ToLower(sourceDay)},
-			{"date": date, "source_day": bson.M{"$in": []interface{}{"", nil}}},
-		},
+	var filter bson.M
+	if sourceDay != "" {
+		weekDates := getWeekDates(date)
+		filter = bson.M{
+			"name": taskName,
+			"$or": []bson.M{
+				{"date": date, "source_day": bson.M{"$in": []interface{}{"", nil}}},
+				{"source_day": strings.ToLower(sourceDay), "date": bson.M{"$in": weekDates}},
+			},
+		}
+	} else {
+		filter = bson.M{
+			"name":       taskName,
+			"date":       date,
+			"source_day": bson.M{"$in": []interface{}{"", nil}},
+		}
 	}
 
 	// Get Information about tasks for the specific date/day

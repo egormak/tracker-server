@@ -7,8 +7,10 @@ import (
 )
 
 type MockRunningTaskStorage struct {
-	tasks   map[string]entity.RunningTask
-	records []entity.TaskRecord
+	tasks                map[string]entity.RunningTask
+	records              []entity.TaskRecord
+	addTaskRecordErr     error
+	deleteRunningTaskErr error
 }
 
 func NewMockRunningTaskStorage() *MockRunningTaskStorage {
@@ -47,6 +49,9 @@ func (m *MockRunningTaskStorage) UpsertRunningTask(task entity.RunningTask) erro
 }
 
 func (m *MockRunningTaskStorage) DeleteRunningTask(taskName string) error {
+	if m.deleteRunningTaskErr != nil {
+		return m.deleteRunningTaskErr
+	}
 	delete(m.tasks, taskName)
 	return nil
 }
@@ -56,6 +61,9 @@ func (m *MockRunningTaskStorage) GetRole(taskName string) (string, error) {
 }
 
 func (m *MockRunningTaskStorage) AddTaskRecord(task entity.TaskRecord) error {
+	if m.addTaskRecordErr != nil {
+		return m.addTaskRecordErr
+	}
 	m.records = append(m.records, task)
 	return nil
 }

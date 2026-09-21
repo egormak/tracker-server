@@ -1,11 +1,16 @@
 package entity
 
+import "time"
+
 type TaskRecord struct {
-	Name         string
-	Role         string
-	TimeDuration int
-	Date         string
-	SourceDay    string
+	ID           string    `bson:"_id,omitempty" json:"id,omitempty"`
+	Name         string    `bson:"name" json:"name"`
+	Role         string    `bson:"role" json:"role"`
+	TimeDuration int       `bson:"time_duration" json:"time_duration"`
+	Date         string    `bson:"date" json:"date"`
+	SourceDay    string    `bson:"source_day,omitempty" json:"source_day,omitempty"`
+	CreatedAt    time.Time `bson:"created_at,omitempty" json:"created_at,omitempty"`
+	SourceDevice string    `bson:"source_device,omitempty" json:"source_device,omitempty"`
 }
 
 type TaskRecordRequest struct {

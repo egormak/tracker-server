@@ -38,6 +38,11 @@ func main() {
 		slog.Error("Can't connect to mongo", "error", err)
 		os.Exit(1)
 	}
+	if err := mongoconn.EnsureIndexes(ctx); err != nil {
+		slog.Error("Failed to ensure MongoDB indexes", "error", err)
+	} else {
+		slog.Info("MongoDB indexes ensured successfully")
+	}
 	notify := telegram.TelegramNew(cfg.Telegram.APIKey, cfg.Telegram.RoomID)
 
 	app := fiber.New()

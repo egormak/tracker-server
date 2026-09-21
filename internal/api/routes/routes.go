@@ -4,9 +4,6 @@ import (
 	"tracker-server/config"
 	"tracker-server/internal/api/handler"
 	"tracker-server/internal/api/middleware"
-	"tracker-server/internal/handler/manage"
-	"tracker-server/internal/handler/role"
-	"tracker-server/internal/handler/welcome"
 	"tracker-server/internal/notify"
 	"tracker-server/internal/realtime"
 	"tracker-server/internal/services"
@@ -30,62 +27,47 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	}
 	eveningService := services.NewEveningService(statsService, restService)
 
-	// Handlers
-	// Task
+	// Domain Handlers
 	taskHandler := handler.NewTaskHandler(taskService)
-	// TaskRecords
 	taskRecordHandler := handler.NewTaskRecordHandler(taskRecordService, scheduleService)
-	// Rest
 	restHandler := handler.NewRestHandler(restService)
-	// Statistics
-	statsHandler := handler.NewStatisticHandler(statsService)
-	// Manage
+	statsHandler := handler.NewStatisticHandler(statsService, runningTaskService, restService, eveningService)
 	manageHandler := handler.NewManageHandler(manageService)
-	// Schedule
 	scheduleHandler := handler.NewScheduleHandler(scheduleService)
-	// Running Task
 	runningTaskHandler := handler.NewRunningTaskHandler(runningTaskService, hub)
-	// Evening Mode
 	eveningHandler := handler.NewEveningHandler(eveningService)
-
-	// OLD Logic (manage and role handlers still needed for legacy routes)
-	roleHandler := role.New(mongoconn, notify)
-	manageHandlerOld := manage.New(mongoconn, notify)
-	//
+	roleHandler := handler.NewRoleHandler(mongoconn, notify)
+	legacyTimerHandler := handler.NewLegacyTimerHandler(mongoconn)
+	telegramHandler := handler.NewTelegramHandler(notify)
 
 	// Routes
 	tgAuth := middleware.TelegramAuth(cfg)
 	api := app.Group("/api", tgAuth)
+
+	// Dashboard
+	api.Get("/v1/dashboard/state", statsHandler.GetDashboardState)
+
 	// Task
 	api.Get("/v1/task/params", taskHandler.TaskParams)
-	api.Get("/v1/record/params", taskHandler.TaskParams)         // Legacy endpoint - same handler
 	api.Get("/v1/record/task-day", taskHandler.GetDayTaskRecord) // Legacy endpoint for CLI
-	// api.Post("/v1/task/create", taskHandler.CreateTask)
+
 	// TaskRecords
 	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
-	api.Post("/v1/record", taskRecordHandler.AddRecord) // Legacy endpoint - same handler
-	// api.Get("/v1/task/next", taskRecordHandler.TasksNext)
 	api.Get("/v1/task/plan/percent", taskRecordHandler.GetTaskPlanPercent)
-	api.Get("/v1/task/plan-percent", taskRecordHandler.GetTaskPlanPercent) // Legacy alias (hyphen instead of slash)
 	api.Get("/v1/task/plan/percent/schedule", taskRecordHandler.GetTaskPlanPercentWithSchedule)
 	api.Post("/v1/task/plan/rotate", taskRecordHandler.ChangeGroupPlanPercent)
-	api.Get("/v1/task/plan-percent/change", taskRecordHandler.ChangeGroupPlanPercent) // Legacy rotation
+
 	// Rest
 	api.Post("/v1/rest/add", restHandler.RestAdd)
-	api.Post("/v1/rest-spend", restHandler.RestSpend) // Remove in future
 	api.Post("/v1/rest/spend", restHandler.RestSpend)
-	api.Get("/v1/rest-get", restHandler.RestGet) // Remove in future
 	api.Get("/v1/rest/get", restHandler.RestGet)
+	api.Post("/v1/rest/reset", restHandler.RestReset)
+
 	// Manage
 	api.Post("/v1/manage/task/create", manageHandler.CreateTask)
 
-	// Review
-
-	// Routes
-
 	// Statistics
-	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone) // TODO Remove in future
-	// Alias for dashboard tasks list (today planned vs done)
+	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone)
 	api.Get("/v1/stats/tasks/today", statsHandler.StatCompletionTimeDone)
 	api.Get("/v1/stats/weekly", statsHandler.GetWeeklyStats)
 	api.Get("/v1/tasklist", statsHandler.ShowTaskList) // Legacy endpoint for CLI and web UI
@@ -93,33 +75,30 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Plan Percents
 	api.Get("/v1/manage/plan-percents", manageHandler.GetPlanPercents)                    // New route for plan percents
 	api.Delete("/v1/manage/plan-percents/:group/:value", manageHandler.DeletePlanPercent) // Remove specific plan percent
+	api.Post("/v1/manage/procents", manageHandler.ProcentsSet)
+	api.Get("/v1/manage/procents", manageHandler.GetPlanProcentsLegacy)
 
-	// General
+	// Legacy Countdown & Global Timers
+	api.Post("/v1/timer/set", legacyTimerHandler.TimerSet)
+	api.Get("/v1/timer/get", legacyTimerHandler.TimerGet)
+	api.Post("/v1/timer/del", legacyTimerHandler.TimerDel)
+	api.Post("/v1/manage/timer/global", legacyTimerHandler.TimerGlobalSet)
+	api.Get("/v1/manage/timer/global", legacyTimerHandler.TimerGlobalGet)
 
-	api.Post("/v1/timer/set", manageHandlerOld.TimerSet)
-	api.Get("/v1/timer/get", manageHandlerOld.TimerGet)
-	api.Post("/v1/timer/del", manageHandlerOld.TimerDel)
-
-	// Legacy record routes for web UI and CLI
+	// Records
 	api.Get("/v1/records", taskRecordHandler.ShowRecords)
 	api.Post("/v1/records/clean", taskRecordHandler.CleanRecords)
-	api.Get("/v1/records/clean", taskRecordHandler.CleanRecords)
 
 	// Roles
 	api.Get("/v1/roles/records", roleHandler.ShowRolesRecords)
-	api.Get("/v1/roles/records/today", roleHandler.StatCompletionTimeDone) // Change function in future
+	api.Get("/v1/roles/records/today", roleHandler.StatCompletionTimeDone)
 	api.Get("/v1/role/recheck", roleHandler.RecheckRole)
 	api.Get("/v1/role/get", roleHandler.TaskRoleGet)
 
-	//Manage
-	api.Post("/v1/manage/procents", manageHandlerOld.ProcentsSet)
-	api.Get("/v1/manage/procents", manageHandlerOld.GetPlanProcents)
-	api.Get("/v1/manage/timer/recheck", manageHandlerOld.TimerRecheck)
-	api.Post("/v1/manage/timer/global", manageHandlerOld.TimerGlobalSet)
-	api.Get("/v1/manage/timer/global", manageHandlerOld.TimerGlobalGet)
-	api.Post("/v1/manage/telegram/start", manageHandlerOld.TelegramSendStart)
-	api.Post("/v1/manage/telegram/stop", manageHandlerOld.TelegramSendStop)
-	api.Post("/v1/manage/telegram/message", manageHandlerOld.TelegramSendCustom)
+	// Telegram
+	api.Post("/v1/manage/telegram/start", telegramHandler.TelegramSendStart)
+	api.Post("/v1/manage/telegram/stop", telegramHandler.TelegramSendStop)
+	api.Post("/v1/manage/telegram/message", telegramHandler.TelegramSendCustom)
 
 	// Schedule
 	api.Post("/v1/schedule", scheduleHandler.CreateSchedule)
@@ -148,7 +127,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Get("/v1/mode/evening-focus", eveningHandler.GetEveningFocus)
 	api.Post("/v1/mode/evening-focus/skip", eveningHandler.SkipTask)
 
-	app.Get("/", welcome.Welcome)
+	app.Get("/", handler.Welcome)
 
 	return runningTaskService
 }

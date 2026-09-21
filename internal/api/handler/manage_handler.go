@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/services"
 	"tracker-server/internal/storage"
@@ -16,6 +17,7 @@ import (
 type ManageService interface {
 	CreateTaskWithRole(taskName string, role string) error
 	GetPlanPercents() (*entity.PlanPercents, error)
+	SetPlanPercents(procentM entity.PlanPercents) error
 	RemovePlanPercent(group string, value int) error
 }
 
@@ -153,111 +155,81 @@ func (m *ManageHandler) DeletePlanPercent(c *fiber.Ctx) error {
 	})
 }
 
-// // SetTaskParams handles setting task parameters
-// func (m *ManageHandler) SetTaskParams(c *fiber.Ctx) error {
-// 	var request entity.TaskParams
+// ProcentsSet sets the percentage distribution for a plan role or all roles
+func (m *ManageHandler) ProcentsSet(c *fiber.Ctx) error {
+	var body struct {
+		Procents []int  `json:"procents"`
+		RoleName string `json:"role_name"`
+	}
 
-// 	if err := c.BodyParser(&request); err != nil {
-// 		slog.Error("Failed to parse request body", "error", err)
-// 		return c.Status(400).JSON(&fiber.Map{
-// 			"status":  "error",
-// 			"message": "Invalid request format",
-// 		})
-// 	}
+	if err := c.BodyParser(&body); err != nil {
+		slog.Error("ProcentsSet: can't parse body", "error", err)
+		return c.Status(400).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
 
-// 	// Validate request data
-// 	if request.Name == "" {
-// 		return c.Status(400).JSON(&fiber.Map{
-// 			"status":  "error",
-// 			"message": "Task name is required",
-// 		})
-// 	}
+	procentM, err := m.srv.GetPlanPercents()
+	var currentPercents entity.PlanPercents
+	if err == nil && procentM != nil {
+		currentPercents = *procentM
+	}
 
-// 	// Additional validation could be added here
+	if body.RoleName != "" {
+		switch strings.ToLower(body.RoleName) {
+		case "plan":
+			currentPercents.Plan = body.Procents
+		case "work":
+			currentPercents.Work = body.Procents
+		case "learn":
+			currentPercents.Learn = body.Procents
+		case "rest":
+			currentPercents.Rest = body.Procents
+		}
+	} else {
+		currentPercents.Plan = body.Procents
+		currentPercents.Work = body.Procents
+		currentPercents.Learn = body.Procents
+		currentPercents.Rest = body.Procents
+	}
 
-// 	// This would typically call a service method
-// 	// For now, return success
-// 	return c.Status(200).JSON(&fiber.Map{
-// 		"status":  "success",
-// 		"message": "Task parameters set successfully",
-// 	})
-// }
+	if err := m.srv.SetPlanPercents(currentPercents); err != nil {
+		slog.Error("ProcentsSet: failed", "error", err)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
 
-// // GetTasks retrieves a list of tasks
-// func (m *ManageHandler) GetTasks(c *fiber.Ctx) error {
-// 	// This would typically call a service method to get tasks
-// 	// For now, return a placeholder response
-// 	return c.Status(200).JSON(&fiber.Map{
-// 		"status": "success",
-// 		"tasks":  []string{}, // Empty array as placeholder
-// 	})
-// }
+	return c.Status(200).JSON(&fiber.Map{
+		"status":  "accept",
+		"message": "Plan procents was updated",
+	})
+}
 
-// // DeleteTask handles task deletion
-// func (m *ManageHandler) DeleteTask(c *fiber.Ctx) error {
-// 	taskID := c.Params("id")
-// 	if taskID == "" {
-// 		return c.Status(400).JSON(&fiber.Map{
-// 			"status":  "error",
-// 			"message": "Task ID is required",
-// 		})
-// 	}
+// GetPlanProcentsLegacy returns plan percents in the legacy structure
+func (m *ManageHandler) GetPlanProcentsLegacy(c *fiber.Ctx) error {
+	procents, err := m.srv.GetPlanPercents()
+	if err != nil {
+		slog.Error("GetPlanProcentsLegacy: failed", "error", err)
+		return c.Status(500).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
 
-// 	// This would typically call a service method to delete the task
-// 	// For now, return success
-// 	return c.Status(200).JSON(&fiber.Map{
-// 		"status":  "success",
-// 		"message": "Task deleted successfully",
-// 	})
-// }
-
-// // UpdateTask handles task updates
-// func (m *ManageHandler) UpdateTask(c *fiber.Ctx) error {
-// 	taskID := c.Params("id")
-// 	if taskID == "" {
-// 		return c.Status(400).JSON(&fiber.Map{
-// 			"status":  "error",
-// 			"message": "Task ID is required",
-// 		})
-// 	}
-
-// 	var request struct {
-// 		TaskName string `json:"task_name"`
-// 		Role     string `json:"role"`
-// 		Priority int    `json:"priority"`
-// 	}
-
-// 	if err := c.BodyParser(&request); err != nil {
-// 		return c.Status(400).JSON(&fiber.Map{
-// 			"status":  "error",
-// 			"message": "Invalid request format",
-// 		})
-// 	}
-
-// 	// This would typically call a service method to update the task
-// 	// For now, return success
-// 	return c.Status(200).JSON(&fiber.Map{
-// 		"status":  "success",
-// 		"message": "Task updated successfully",
-// 	})
-// }
-
-// // RecheckRoles triggers a role rechecking process
-// func (m *ManageHandler) RecheckRoles(c *fiber.Ctx) error {
-// 	// This would typically call a service method to recheck roles
-// 	// For now, return success
-// 	return c.Status(200).JSON(&fiber.Map{
-// 		"status":  "success",
-// 		"message": "Roles rechecked successfully",
-// 	})
-// }
-
-// // CleanRecords handles cleaning of task records
-// func (m *ManageHandler) CleanRecords(c *fiber.Ctx) error {
-// 	// This would typically call a service method to clean records
-// 	// For now, return success
-// 	return c.Status(200).JSON(&fiber.Map{
-// 		"status":  "success",
-// 		"message": "Records cleaned successfully",
-// 	})
-// }
+	return c.Status(200).JSON(&fiber.Map{
+		"status": "success",
+		"data": fiber.Map{
+			"title":          procents.Title,
+			"date":           procents.Date,
+			"current_choice": procents.CurrentChoice,
+			"plans":          procents.Plans,
+			"plan":           procents.Plan,
+			"work":           procents.Work,
+			"learn":          procents.Learn,
+			"rest":           procents.Rest,
+		},
+	})
+}

@@ -60,16 +60,21 @@ func (s *Storage) GetRecordsForDates(dates []string) ([]entity.TaskRecord, error
 }
 
 // GetRecordsForDatesOrSourceDays retrieves task records matching either an exact
-// record date (with no source_day) or a rollover source_day, mirroring
-// GetTaskDurationForDate's per-task fallback semantics: a source_day match ignores
-// date, while a date match only applies to records that aren't already a rollover.
+// record date (with no source_day) or a rollover source_day within the week of the queried dates.
+// Source_day matching is strictly bounded by the calendar week containing the queried dates,
+// preventing unbounded historical over-crediting from prior weeks.
 func (s *Storage) GetRecordsForDatesOrSourceDays(dates []string, sourceDays []string) ([]entity.TaskRecord, error) {
 	coll := s.Client.Database(dbName).Collection(tasksList)
+
+	var weekDates []string
+	if len(dates) > 0 {
+		weekDates = getWeekDates(dates[0])
+	}
 
 	filter := bson.M{
 		"$or": []bson.M{
 			{"date": bson.M{"$in": dates}, "source_day": bson.M{"$in": []interface{}{"", nil}}},
-			{"source_day": bson.M{"$in": sourceDays}},
+			{"source_day": bson.M{"$in": sourceDays}, "date": bson.M{"$in": weekDates}},
 		},
 	}
 

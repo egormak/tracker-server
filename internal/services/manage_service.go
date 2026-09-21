@@ -27,6 +27,9 @@ type ManageStorage interface {
 	// GetPlanProcents retrieves the plan percents configuration
 	GetPlanProcents() (entity.PlanPercents, error)
 
+	// ProcentsSet updates the plan percents configuration
+	ProcentsSet(procentM entity.PlanPercents) error
+
 	// RemovePlanPercent removes a specific percent value from the given group
 	RemovePlanPercent(group string, value int) error
 }
@@ -80,6 +83,14 @@ func (m *ManageService) GetPlanPercents() (*entity.PlanPercents, error) {
 	}
 
 	return &procents, nil
+}
+
+// SetPlanPercents saves the full plan percents configuration
+func (m *ManageService) SetPlanPercents(procentM entity.PlanPercents) error {
+	if err := m.st.ProcentsSet(procentM); err != nil {
+		return fmt.Errorf("failed to set plan percents: %w", err)
+	}
+	return nil
 }
 
 var planPercentGroups = map[string]struct{}{

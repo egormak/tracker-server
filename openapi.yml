@@ -49,6 +49,27 @@ paths:
                 type: string
                 example: "Welcome to Tracker Server API"
 
+  /api/v1/dashboard/state:
+    get:
+      tags:
+        - Statistics
+      summary: Get Consolidated Dashboard State
+      description: Returns consolidated state including running task, today's tasks, rest pool, evening focus, and completion percentages in a single request.
+      operationId: getDashboardState
+      responses:
+        '200':
+          description: Dashboard state retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStateResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/stats/done/today:
     get:
       tags:
@@ -387,7 +408,7 @@ paths:
       tags:
         - Rest
       summary: Add rest time
-      description: Add rest time to the account
+      description: Add rest time to the account. Capped at a daily maximum ceiling of 6000 raw units (60 minutes).
       operationId: addRest
       requestBody:
         required: true
@@ -453,7 +474,7 @@ paths:
       tags:
         - Rest
       summary: Get rest time
-      description: Get available rest time
+      description: Get available rest time in raw units (minutes * 100). Capped at a maximum ceiling of 6000 units (60 minutes).
       operationId: getRest
       responses:
         '200':
@@ -462,6 +483,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RestTimeResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/rest/reset:
+    post:
+      tags:
+        - Rest
+      summary: Reset rest balance
+      description: Resets available rest balance to 0 for today
+      operationId: resetRest
+      responses:
+        '200':
+          description: Rest was reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
         '500':
           description: Internal server error
           content:
@@ -1113,27 +1155,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/task/plan-percent/change:
-    get:
-      deprecated: true
-      tags:
-        - Task
-      summary: Rotate plan percent group (legacy)
-      operationId: changeLegacyPlanPercent
-      responses:
-        '200':
-          description: Rotation accepted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /api/v1/record/task-day:
     get:
       deprecated: true
@@ -1283,54 +1304,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RoleGetResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/rest-get:
-    get:
-      deprecated: true
-      tags:
-        - Rest
-      summary: Get rest time (legacy)
-      operationId: getRestLegacy
-      responses:
-        '200':
-          description: Rest time retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RestTimeResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/rest-spend:
-    post:
-      deprecated: true
-      tags:
-        - Rest
-      summary: Spend rest time (legacy)
-      operationId: spendRestLegacy
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RestRecordRequest"
-      responses:
-        '200':
-          description: Rest time spent successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
         '500':
           description: Internal server error
           content:
@@ -2149,11 +2122,11 @@ components:
       properties:
         rest_time:
           type: integer
-          description: Available rest time in minutes
+          description: Available rest time in raw units (minutes * 100). Capped at a maximum ceiling of 6000 units (60 minutes).
       required:
         - rest_time
       example:
-        rest_time: 45
+        rest_time: 4500
 
     CreateTaskRequest:
       type: object
@@ -2793,6 +2766,76 @@ components:
           example: "telegram"
       required:
         - task_name
+
+    TaskRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "64e0a7f123456789abcdef01"
+        name:
+          type: string
+          example: "coding"
+        role:
+          type: string
+          example: "work"
+        time_duration:
+          type: integer
+          example: 45
+        date:
+          type: string
+          example: "20 September 2026"
+        source_day:
+          type: string
+          example: "monday"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-09-20T22:00:00Z"
+        source_device:
+          type: string
+          example: "laptop"
+      required:
+        - name
+        - role
+        - time_duration
+        - date
+
+    DashboardStateResponse:
+      type: object
+      properties:
+        running_task:
+          $ref: "#/components/schemas/RunningTask"
+          nullable: true
+        today_tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskResult"
+        rest_pool:
+          type: integer
+          description: Rest pool balance in raw units (units = minutes * 100)
+          example: 3000
+        evening_focus:
+          $ref: "#/components/schemas/EveningFocusResponse"
+          nullable: true
+        total_planned:
+          type: integer
+          description: Total planned minutes for today
+          example: 240
+        total_done:
+          type: integer
+          description: Total completed minutes for today
+          example: 180
+        completion_pct:
+          type: integer
+          description: Overall completion percentage for today
+          example: 75
+      required:
+        - today_tasks
+        - rest_pool
+        - total_planned
+        - total_done
+        - completion_pct
 
 
 
