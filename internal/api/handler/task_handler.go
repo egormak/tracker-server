@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/storage"
 
@@ -9,6 +10,7 @@ import (
 
 type taskService interface {
 	GetTaskParams(taskName string) (entity.TaskParams, error)
+	SetTaskParams(params entity.TaskParams) error
 	GetDayTaskRecord(taskName string) (int, error)
 }
 
@@ -28,11 +30,10 @@ func (t *TaskHandler) TaskParams(c *fiber.Ctx) error {
 		status := 500
 		message := "error"
 
-		switch err {
-		case storage.ErrTaskNotFound:
+		if errors.Is(err, storage.ErrTaskNotFound) {
 			status = 404
 			message = "Task Not Found"
-		case storage.ErrParamsOld:
+		} else if errors.Is(err, storage.ErrParamsOld) {
 			status = 404
 			message = "params old"
 		}
@@ -44,6 +45,53 @@ func (t *TaskHandler) TaskParams(c *fiber.Ctx) error {
 	}
 
 	return c.Status(200).JSON(result)
+}
+
+// SetTaskParams sets task parameters (supports name, time_duration or time, and priority)
+func (t *TaskHandler) SetTaskParams(c *fiber.Ctx) error {
+	var req struct {
+		Name         string `json:"name"`
+		TimeDuration int    `json:"time_duration"`
+		Time         int    `json:"time"`
+		Priority     int    `json:"priority"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "cannot parse json body",
+		})
+	}
+
+	if req.Name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "task name is required",
+		})
+	}
+
+	taskTime := req.TimeDuration
+	if taskTime == 0 && req.Time != 0 {
+		taskTime = req.Time
+	}
+
+	params := entity.TaskParams{
+		Name:     req.Name,
+		Time:     taskTime,
+		Priority: req.Priority,
+	}
+
+	if err := t.srv.SetTaskParams(params); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  "success",
+		"message": "task params updated successfully",
+	})
 }
 
 // GetDayTaskRecord returns the total time spent on a task today (legacy endpoint for CLI)

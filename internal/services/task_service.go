@@ -8,6 +8,7 @@ import (
 )
 
 type TaskStorage interface {
+	SetTaskParams(params entity.TaskParams) error
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	GetActiveSchedule() (entity.WeeklySchedule, error)
 	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
@@ -46,6 +47,18 @@ func (t *TaskService) GetTaskParams(taskName string) (entity.TaskParams, error) 
 	// Get today's day name
 	today := strings.ToLower(time.Now().Weekday().String())
 
+	// Check today's schedule first (e.g. if today's schedule wasn't applied to task_list yet)
+	todaySchedule := getDayScheduleFromWeekly(schedule, today)
+	for _, task := range todaySchedule.Tasks {
+		if task.Name == taskName {
+			return entity.TaskParams{
+				Name:     task.Name,
+				Time:     task.Time,
+				Priority: task.Priority,
+			}, nil
+		}
+	}
+
 	// Get previous days
 	previousDays := getPreviousDaysForTask(today)
 
@@ -68,6 +81,10 @@ func (t *TaskService) GetTaskParams(taskName string) (entity.TaskParams, error) 
 
 	// Task not found in schedule either, return original error
 	return entity.TaskParams{}, fmt.Errorf("task not found in today's list or schedule: %w", err)
+}
+
+func (t *TaskService) SetTaskParams(params entity.TaskParams) error {
+	return t.st.SetTaskParams(params)
 }
 
 // Helper functions

@@ -49,6 +49,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	// Task
 	api.Get("/v1/task/params", taskHandler.TaskParams)
+	api.Post("/v1/task/params", taskHandler.SetTaskParams)
 	api.Get("/v1/record/task-day", taskHandler.GetDayTaskRecord) // Legacy endpoint for CLI
 
 	// TaskRecords

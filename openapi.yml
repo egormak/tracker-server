@@ -170,6 +170,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags:
+        - Task
+      summary: Set task parameters
+      description: Update parameters for a specific task
+      operationId: setTaskParams
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetTaskParamsRequest"
+      responses:
+        '200':
+          description: Task parameters updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/taskrecord:
     post:
@@ -332,66 +363,6 @@ paths:
       responses:
         '200':
           description: Group rotated successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/record/params:
-    get:
-      deprecated: true
-      tags:
-        - Task
-      summary: Get task parameters (legacy)
-      description: Legacy endpoint - use /api/v1/task/params instead
-      operationId: getTaskParamsLegacy
-      parameters:
-        - name: task_name
-          in: query
-          description: Name of the task
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Task parameters retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TaskParams"
-        '404':
-          description: Task not found or parameters are old
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    post:
-      deprecated: true
-      tags:
-        - Task
-      summary: Set task params (legacy)
-      operationId: setTaskParamsLegacy
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SetTaskParamsRequest"
-      responses:
-        '200':
-          description: Parameters set
           content:
             application/json:
               schema:
