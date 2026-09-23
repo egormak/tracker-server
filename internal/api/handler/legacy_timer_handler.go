@@ -18,7 +18,8 @@ func NewLegacyTimerHandler(st storage.Storage) *LegacyTimerHandler {
 // TimerSet sets the legacy countdown timer duration
 func (h *LegacyTimerHandler) TimerSet(c *fiber.Ctx) error {
 	var body struct {
-		Count int `json:"count"`
+		Count        int `json:"count"`
+		TimeDuration int `json:"time_duration"`
 	}
 
 	if err := c.BodyParser(&body); err != nil {
@@ -27,6 +28,10 @@ func (h *LegacyTimerHandler) TimerSet(c *fiber.Ctx) error {
 			"status":  "error",
 			"message": err.Error(),
 		})
+	}
+
+	if body.Count <= 0 && body.TimeDuration > 0 {
+		body.Count = body.TimeDuration
 	}
 
 	if err := h.st.TimeListSetDB(body.Count); err != nil {
@@ -55,17 +60,22 @@ func (h *LegacyTimerHandler) TimerGet(c *fiber.Ctx) error {
 	}
 
 	return c.Status(200).JSON(&fiber.Map{
-		"status": "accept",
-		"count":  count,
+		"time_duration": count,
+		"count":         count,
 	})
 }
 
 // TimerDel deletes/resets the legacy countdown timer duration
 func (h *LegacyTimerHandler) TimerDel(c *fiber.Ctx) error {
 	var body struct {
-		Count int `json:"count"`
+		Count        int `json:"count"`
+		TimeDuration int `json:"time_duration"`
 	}
 	_ = c.BodyParser(&body)
+
+	if body.Count <= 0 && body.TimeDuration > 0 {
+		body.Count = body.TimeDuration
+	}
 
 	if err := h.st.TimeListDelDB(body.Count); err != nil {
 		slog.Error("TimerDel: TimeListDelDB failed", "error", err)
