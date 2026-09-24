@@ -29,6 +29,8 @@ tags:
     description: Weekly schedule management with automatic rollover logic
   - name: EveningMode
     description: Evening Catch-Up micro-sprint mode operations
+  - name: Ramp
+    description: Linear Warm-Up Ramp operations
   - name: General
     description: General API endpoints
 
@@ -475,6 +477,121 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/ramp/status:
+    get:
+      tags:
+        - Ramp
+      summary: Get Linear Warm-Up Ramp status
+      description: Returns current ramp step, cap minutes, whether ramp is capped, today's focus minutes, and current configuration with automatic midnight reset.
+      operationId: getRampStatus
+      responses:
+        '200':
+          description: Current ramp status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RampStatus"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/ramp/reset:
+    post:
+      tags:
+        - Ramp
+      summary: Reset warm-up ramp step to 1
+      description: Manually resets current warm-up step to 1 minute.
+      operationId: resetRamp
+      responses:
+        '200':
+          description: Ramp successfully reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RampStatus"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/ramp/advance:
+    post:
+      tags:
+        - Ramp
+      summary: Advance warm-up ramp step
+      description: Manually advances current warm-up step by +1 minute (clamped to cap_minutes).
+      operationId: advanceRamp
+      responses:
+        '200':
+          description: Ramp successfully advanced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RampStatus"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/ramp/config:
+    get:
+      tags:
+        - Ramp
+      summary: Get warm-up ramp configuration
+      description: Retrieves current ramp configuration including cap minutes, eligible roles and tasks, excluded tasks, and rest fallback.
+      operationId: getRampConfig
+      responses:
+        '200':
+          description: Current ramp configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RampConfig"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+        - Ramp
+      summary: Update warm-up ramp configuration
+      description: Updates ramp configuration rules including cap_minutes (minimum 5) and default_rest_fallback (minimum 1).
+      operationId: updateRampConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RampConfig"
+      responses:
+        '200':
+          description: Ramp configuration successfully updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RampStatus"
+        '400':
+          description: Invalid ramp configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         '500':
           description: Internal server error
           content:
@@ -2807,6 +2924,77 @@ components:
         - total_planned
         - total_done
         - completion_pct
+
+    RampStatus:
+      type: object
+      description: Status and progression metrics of the Linear Warm-Up Ramp
+      properties:
+        current_step:
+          type: integer
+          description: Current step duration in minutes (1 to cap_minutes)
+          example: 3
+        cap_minutes:
+          type: integer
+          description: Maximum ramp ceiling in minutes
+          example: 25
+        is_capped:
+          type: boolean
+          description: Whether current step has reached cap_minutes
+          example: false
+        today_focus_minutes:
+          type: integer
+          description: Total focus minutes completed today on eligible tasks
+          example: 6
+        date:
+          type: string
+          description: Date for which current step applies
+          example: "23 September 2026"
+        config:
+          $ref: "#/components/schemas/RampConfig"
+      required:
+        - current_step
+        - cap_minutes
+        - is_capped
+        - today_focus_minutes
+        - date
+        - config
+
+    RampConfig:
+      type: object
+      description: Configuration settings for the Linear Warm-Up Ramp
+      properties:
+        cap_minutes:
+          type: integer
+          description: Maximum ramp step cap in minutes (minimum 5)
+          example: 25
+        enabled_roles:
+          type: array
+          description: Roles participating in warm-up progression
+          items:
+            type: string
+          example: ["work", "learn"]
+        enabled_tasks:
+          type: array
+          description: Explicit task names participating in warm-up progression
+          items:
+            type: string
+          example: ["home_task"]
+        excluded_tasks:
+          type: array
+          description: Tasks excluded from warm-up (fallback applied)
+          items:
+            type: string
+          example: ["video", "movies", "games", "telegram"]
+        default_rest_fallback:
+          type: integer
+          description: Fallback duration in minutes for excluded/rest tasks
+          example: 15
+      required:
+        - cap_minutes
+        - enabled_roles
+        - enabled_tasks
+        - excluded_tasks
+        - default_rest_fallback
 
 
 

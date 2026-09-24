@@ -1,6 +1,9 @@
 package storage
 
-import "tracker-server/internal/domain/entity"
+import (
+	"context"
+	"tracker-server/internal/domain/entity"
+)
 
 type Storage interface {
 	RestSpend(restTime int) error
@@ -67,4 +70,10 @@ type Storage interface {
 	GetAllRunningTasks() ([]entity.RunningTask, error)
 	UpsertRunningTask(task entity.RunningTask) error
 	DeleteRunningTask(taskName string) error
+
+	// Warm-up Ramp
+	GetRampInfo(ctx context.Context) (entity.RampInfo, error)
+	SaveRampInfo(ctx context.Context, ramp entity.RampInfo) error
+	ResetRampStep(ctx context.Context, date string) error
+	UpdateRampStep(ctx context.Context, step int, date string) error
 }

@@ -16,7 +16,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	// Services
 	taskService := services.NewTaskService(mongoconn, notify)
-	taskRecordService := services.NewTaskRecordService(mongoconn)
+	rampService := services.NewRampService(mongoconn)
+	taskRecordService := services.NewTaskRecordService(mongoconn, rampService)
 	restService := services.NewRestService(mongoconn)
 	statsService := services.NewStatisticService(mongoconn)
 	manageService := services.NewManageService(mongoconn)
@@ -30,6 +31,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Domain Handlers
 	taskHandler := handler.NewTaskHandler(taskService)
 	taskRecordHandler := handler.NewTaskRecordHandler(taskRecordService, scheduleService)
+	rampHandler := handler.NewRampHandler(rampService)
 	restHandler := handler.NewRestHandler(restService)
 	statsHandler := handler.NewStatisticHandler(statsService, runningTaskService, restService, eveningService)
 	manageHandler := handler.NewManageHandler(manageService)
@@ -63,6 +65,13 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/rest/spend", restHandler.RestSpend)
 	api.Get("/v1/rest/get", restHandler.RestGet)
 	api.Post("/v1/rest/reset", restHandler.RestReset)
+
+	// Ramp
+	api.Get("/v1/ramp/status", rampHandler.GetStatus)
+	api.Post("/v1/ramp/reset", rampHandler.Reset)
+	api.Post("/v1/ramp/advance", rampHandler.Advance)
+	api.Get("/v1/ramp/config", rampHandler.GetConfig)
+	api.Put("/v1/ramp/config", rampHandler.UpdateConfig)
 
 	// Manage
 	api.Post("/v1/manage/task/create", manageHandler.CreateTask)

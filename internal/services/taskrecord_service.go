@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -29,12 +30,25 @@ type TaskRecordStorage interface {
 	CleanRecords()
 }
 
-type TaskRecordService struct {
-	st TaskRecordStorage
+type RampRecalculator interface {
+	AutoRecalculateOnRecord(ctx context.Context, taskName string, duration int) error
 }
 
-func NewTaskRecordService(st TaskRecordStorage) *TaskRecordService {
-	return &TaskRecordService{st: st}
+type TaskRecordService struct {
+	st          TaskRecordStorage
+	rampService RampRecalculator
+}
+
+func NewTaskRecordService(st TaskRecordStorage, rampRecalculator ...RampRecalculator) *TaskRecordService {
+	svc := &TaskRecordService{st: st}
+	if len(rampRecalculator) > 0 {
+		svc.rampService = rampRecalculator[0]
+	}
+	return svc
+}
+
+func (s *TaskRecordService) SetRampService(ramp RampRecalculator) {
+	s.rampService = ramp
 }
 
 type ScheduleAndParamsStorage interface {
@@ -312,6 +326,12 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 		errMsg := fmt.Errorf("can't add rest: %s", err)
 		slog.Error("task_record_service, add_record:add_rest", "err", errMsg)
 		return errMsg
+	}
+
+	if s.rampService != nil {
+		if err := s.rampService.AutoRecalculateOnRecord(context.Background(), record.Name, record.TimeDuration); err != nil {
+			slog.Error("task_record_service, add_record:auto_recalculate_ramp", "err", err)
+		}
 	}
 
 	return nil

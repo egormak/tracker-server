@@ -18,6 +18,7 @@ const (
 
 	restDocName    = "Rest Info"
 	procentDocName = "Procent Info"
+	rampDocName    = "Ramp Info"
 	restCount      = 30
 )
 
