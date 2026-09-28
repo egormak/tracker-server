@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"tracker-server/internal/domain/entity"
 )
@@ -47,18 +48,35 @@ type ScheduleStorage interface {
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	CreateTask(taskDefinition entity.TaskDefinition) error
 	GetTaskNamesForDate(date string) ([]string, error)
+	HasTasksForDate(date string) (bool, error)
 	MoveTaskToPreviousDate(taskName string, currentDate string) error
-	TimerGlobalSet(timeScheduler int) error
+	TimerGlobalSet(timeScheduler int, date ...string) error
 }
 
 // ScheduleService handles business logic for schedule management
 type ScheduleService struct {
-	st ScheduleStorage
+	st      ScheduleStorage
+	applyMu sync.Mutex
+	nowFunc func() time.Time
 }
 
 // NewScheduleService creates a new instance of ScheduleService
 func NewScheduleService(st ScheduleStorage) *ScheduleService {
-	return &ScheduleService{st: st}
+	return &ScheduleService{st: st, nowFunc: time.Now}
+}
+
+// SetNowFunc overrides the time source (useful for testing)
+func (s *ScheduleService) SetNowFunc(f func() time.Time) {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
+	s.nowFunc = f
+}
+
+func (s *ScheduleService) now() time.Time {
+	if s.nowFunc != nil {
+		return s.nowFunc()
+	}
+	return time.Now()
 }
 
 // CreateSchedule creates a new weekly schedule
@@ -473,13 +491,43 @@ func (s *ScheduleService) buildRolloverList(schedule entity.WeeklySchedule, prev
 	return rollovers
 }
 
-// ApplyScheduleToday creates TaskDefinitions for today based on the active schedule
-// It only applies tasks that are scheduled for today (does not include rollover tasks)
-// Tasks not in today's schedule are moved to the previous day (their date is updated)
-// It also sets the global timer to today's total_time
+// EnsureTodaySchedule checks if today already has tasks recorded via storage;
+// if not, it automatically applies today's schedule from the active weekly schedule.
+// Thread-safe: serialized with ApplyScheduleToday via applyMu to prevent concurrent duplicate applications.
+func (s *ScheduleService) EnsureTodaySchedule() error {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
+
+	todayDate := s.now().Format("2 January 2006")
+	hasTasks, err := s.st.HasTasksForDate(todayDate)
+	if err != nil {
+		return fmt.Errorf("failed to check tasks for date %s: %w", todayDate, err)
+	}
+	if hasTasks {
+		slog.Debug("EnsureTodaySchedule: tasks already exist for today", "date", todayDate)
+		return nil
+	}
+
+	slog.Info("EnsureTodaySchedule: no tasks found for today, applying schedule", "date", todayDate)
+	return s.applyScheduleTodayLocked()
+}
+
+// ApplyScheduleToday creates TaskDefinitions for today based on the active schedule.
+// Thread-safe and protected by applyMu.
 func (s *ScheduleService) ApplyScheduleToday() error {
-	today := strings.ToLower(time.Now().Weekday().String())
-	todayDate := time.Now().Format("2 January 2006")
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
+
+	return s.applyScheduleTodayLocked()
+}
+
+// applyScheduleTodayLocked is the unexported implementation called under applyMu.Lock().
+// It only applies tasks that are scheduled for today (does not include rollover tasks).
+// Tasks not in today's schedule are moved to the previous day (their date is updated).
+// It also sets the global timer to today's total_time.
+func (s *ScheduleService) applyScheduleTodayLocked() error {
+	today := strings.ToLower(s.now().Weekday().String())
+	todayDate := s.now().Format("2 January 2006")
 
 	daySchedule, err := s.st.GetDaySchedule(today)
 	if err != nil {
@@ -487,35 +535,11 @@ func (s *ScheduleService) ApplyScheduleToday() error {
 	}
 
 	// Set the global timer to today's total time
-	if err := s.st.TimerGlobalSet(daySchedule.TotalTime); err != nil {
+	if err := s.st.TimerGlobalSet(daySchedule.TotalTime, todayDate); err != nil {
 		slog.Error("Failed to set global timer", "total_time", daySchedule.TotalTime, "error", err)
 		// Continue even if this fails - don't block task creation
 	} else {
 		slog.Info("Set global timer from schedule", "total_time", daySchedule.TotalTime)
-	}
-
-	// Get existing tasks for today
-	existingTaskNames, err := s.st.GetTaskNamesForDate(todayDate)
-	if err != nil {
-		slog.Warn("Failed to get existing tasks", "error", err)
-		existingTaskNames = []string{}
-	}
-
-	// Build a set of scheduled task names for quick lookup
-	scheduledTaskNames := make(map[string]bool)
-	for _, scheduleTask := range daySchedule.Tasks {
-		scheduledTaskNames[scheduleTask.Name] = true
-	}
-
-	// Remove tasks that are not in today's schedule
-	for _, existingTaskName := range existingTaskNames {
-		if !scheduledTaskNames[existingTaskName] {
-			if err := s.st.MoveTaskToPreviousDate(existingTaskName, todayDate); err != nil {
-				slog.Error("Failed to move task to previous date", "task", existingTaskName, "error", err)
-			} else {
-				slog.Info("Moved task to previous date (not in today's schedule)", "task", existingTaskName)
-			}
-		}
 	}
 
 	// Apply only scheduled tasks for today (no rollovers)

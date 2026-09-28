@@ -131,7 +131,7 @@ func (s *Storage) RestSpend(restMinutes int) error {
 
 func (s *Storage) ResetRest() error {
 	coll := s.Client.Database(dbName).Collection(taskInfo)
-	filter := bson.D{{"title", restDocName}}
+	filter := bson.D{{Key: "title", Value: restDocName}}
 	var result RestData
 	err := coll.FindOne(s.Context, filter).Decode(&result)
 	if err != nil {
@@ -143,7 +143,7 @@ func (s *Storage) ResetRest() error {
 	result.RestCount = 0
 	result.Date = time.Now().Format("2 January 2006")
 
-	update := bson.D{{"$set", result}}
+	update := bson.D{{Key: "$set", Value: result}}
 	options := options.Update().SetUpsert(true)
 	_, err = coll.UpdateOne(s.Context, filter, update, options)
 	if err != nil {
@@ -161,7 +161,7 @@ func (s *Storage) GetRest() (int, error) {
 	coll := s.Client.Database(dbName).Collection(taskInfo)
 
 	// Find Collection
-	filter := bson.D{{"title", restDocName}}
+	filter := bson.D{{Key: "title", Value: restDocName}}
 	err := coll.FindOne(s.Context, filter).Decode(&result)
 	if err != nil {
 		// If no matching document is found, set restTime to 0

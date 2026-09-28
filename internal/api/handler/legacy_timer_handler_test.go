@@ -46,7 +46,7 @@ func (m *mockLegacyTimerStorage) TimeListDelDB(timeDuration int) error {
 	return m.timeListDelDBErr
 }
 
-func (m *mockLegacyTimerStorage) TimerGlobalSet(timeScheduler int) error {
+func (m *mockLegacyTimerStorage) TimerGlobalSet(timeScheduler int, date ...string) error {
 	m.lastGlobalSet = timeScheduler
 	return m.timerGlobalSetErr
 }

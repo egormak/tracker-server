@@ -7,6 +7,11 @@ import (
 	"tracker-server/internal/domain/entity"
 )
 
+// TodayScheduleEnsurer defines the interface for ensuring today's schedule is applied
+type TodayScheduleEnsurer interface {
+	EnsureTodaySchedule() error
+}
+
 type StatisticStorage interface {
 	ShowTaskList() ([]entity.TaskResult, error)
 	GetActiveSchedule() (entity.WeeklySchedule, error)
@@ -14,20 +19,48 @@ type StatisticStorage interface {
 }
 
 type StatisticService struct {
-	st StatisticStorage
+	st      StatisticStorage
+	ensurer TodayScheduleEnsurer
 }
 
-func NewStatisticService(st StatisticStorage) *StatisticService {
-	return &StatisticService{st: st}
+func NewStatisticService(st StatisticStorage, ensurer ...TodayScheduleEnsurer) *StatisticService {
+	var e TodayScheduleEnsurer
+	if len(ensurer) > 0 {
+		e = ensurer[0]
+	}
+	return &StatisticService{st: st, ensurer: e}
 }
 
-// GetTaskRecordToday returns today's tasks with planned (time_duration) and done (time_done)
-func (s *StatisticService) GetTaskRecordToday() ([]entity.TaskResult, error) {
+// SetScheduleEnsurer sets or updates the schedule ensurer
+func (s *StatisticService) SetScheduleEnsurer(ensurer TodayScheduleEnsurer) {
+	s.ensurer = ensurer
+}
+
+// ShowTaskList returns today's tasks with planned (time_duration) and done (time_done).
+// If the retrieved task list is empty and an ensurer is provided, it calls EnsureTodaySchedule() and re-queries once.
+func (s *StatisticService) ShowTaskList() ([]entity.TaskResult, error) {
 	list, err := s.st.ShowTaskList()
 	if err != nil {
 		return nil, err
 	}
+	if len(list) == 0 && s.ensurer != nil {
+		if err := s.ensurer.EnsureTodaySchedule(); err != nil {
+			slog.Warn("ShowTaskList: failed to ensure today schedule", "error", err)
+		} else {
+			// Re-query once
+			list, err = s.st.ShowTaskList()
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	return list, nil
+}
+
+// GetTaskRecordToday returns today's tasks with planned (time_duration) and done (time_done).
+// It delegates to ShowTaskList so that empty task lists trigger the lazy schedule apply fallback.
+func (s *StatisticService) GetTaskRecordToday() ([]entity.TaskResult, error) {
+	return s.ShowTaskList()
 }
 
 // GetWeeklyStats returns aggregated task and role metrics for the current calendar week (Monday to Sunday)

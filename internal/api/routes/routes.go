@@ -12,21 +12,22 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify, cfg config.Config, hub *realtime.Hub) *services.RunningTaskService {
+func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Notify, cfg config.Config, hub *realtime.Hub) (*services.RunningTaskService, *services.DayRollService) {
 
 	// Services
 	taskService := services.NewTaskService(mongoconn, notify)
 	rampService := services.NewRampService(mongoconn)
 	taskRecordService := services.NewTaskRecordService(mongoconn, rampService)
 	restService := services.NewRestService(mongoconn)
-	statsService := services.NewStatisticService(mongoconn)
-	manageService := services.NewManageService(mongoconn)
 	scheduleService := services.NewScheduleService(mongoconn)
+	statsService := services.NewStatisticService(mongoconn, scheduleService)
+	manageService := services.NewManageService(mongoconn)
 	runningTaskService := services.NewRunningTaskService(mongoconn, notify)
 	if hub != nil {
 		runningTaskService.SetHub(hub)
 	}
 	eveningService := services.NewEveningService(statsService, restService)
+	dayRollService := services.NewDayRollService(scheduleService)
 
 	// Domain Handlers
 	taskHandler := handler.NewTaskHandler(taskService)
@@ -139,5 +140,5 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	app.Get("/", handler.Welcome)
 
-	return runningTaskService
+	return runningTaskService, dayRollService
 }

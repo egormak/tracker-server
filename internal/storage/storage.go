@@ -22,7 +22,7 @@ type Storage interface {
 	TimeListSetDB(count int) error
 	TimeListDelDB(timeDuretion int) error
 	TimeTasks() (int, error)
-	TimerGlobalSet(timeScheduler int) error
+	TimerGlobalSet(timeScheduler int, date ...string) error
 	TimerGlobalGet() (int, error)
 	TimeDurationGet() (int, error)
 	AddTaskRecord(task entity.TaskRecord) error
@@ -52,6 +52,7 @@ type Storage interface {
 	// WithCheckBusinessDay(check bool) TaskRecordOption
 	CreateTask(task entity.TaskDefinition) error
 	GetTaskNamesForDate(date string) ([]string, error)
+	HasTasksForDate(date string) (bool, error)
 	MoveTaskToPreviousDate(taskName string, currentDate string) error
 
 	// Schedule management

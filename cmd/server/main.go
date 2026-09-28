@@ -54,11 +54,14 @@ func main() {
 	go hub.Run()
 
 	// Register Routes
-	runningTaskService := routes.RegisterRoutes(app, mongoconn, notify, cfg, hub)
+	runningTaskService, dayRollService := routes.RegisterRoutes(app, mongoconn, notify, cfg, hub)
 
 	// Start Background Watchdog Service (Safety Cap 20m, Heartbeat Lease, TargetDuration Reaper)
 	watchdog := services.NewTimerWatchdog(runningTaskService)
 	watchdog.Start(ctx)
+
+	// Start Background Day-Roll Worker (Silent auto schedule apply)
+	dayRollService.Start(ctx)
 
 	// Start the server
 	log.Fatal(app.Listen(":3000"))

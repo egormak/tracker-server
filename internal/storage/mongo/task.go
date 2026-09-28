@@ -255,7 +255,7 @@ func (s *Storage) SetTaskParams(params entity.TaskParams) error {
 	coll := database.Collection(taskNamesList)
 
 	// Find Collection
-	err := coll.FindOne(s.Context, bson.D{{"name", params.Name}}).Decode(&result)
+	err := coll.FindOne(s.Context, bson.D{{Key: "name", Value: params.Name}}).Decode(&result)
 	if err == mongo.ErrNoDocuments {
 		return fmt.Errorf("set-task-params: %w", mongo.ErrNoDocuments)
 	}
@@ -264,8 +264,8 @@ func (s *Storage) SetTaskParams(params entity.TaskParams) error {
 	result.Priority = params.Priority
 	result.Date = time.Now().Format("2 January 2006")
 
-	filter := bson.D{{"name", params.Name}}
-	update := bson.D{{"$set", result}}
+	filter := bson.D{{Key: "name", Value: params.Name}}
+	update := bson.D{{Key: "$set", Value: result}}
 	_, err = coll.UpdateOne(s.Context, filter, update)
 	if err != nil {
 		return err
@@ -282,7 +282,7 @@ func (s *Storage) GetTaskParams(taskName string) (entity.TaskParams, error) {
 
 	// Find Collection
 	var result entity.TaskDefinition
-	err := coll.FindOne(s.Context, bson.D{{"name", taskName}}).Decode(&result)
+	err := coll.FindOne(s.Context, bson.D{{Key: "name", Value: taskName}}).Decode(&result)
 	if err == mongo.ErrNoDocuments {
 		return entity.TaskParams{}, fmt.Errorf("get-task-params: %w", mongo.ErrNoDocuments)
 	}
@@ -304,7 +304,7 @@ func (s *Storage) IsTaskStrict(taskName string) (bool, error) {
 	coll := database.Collection(taskNamesList)
 
 	var result entity.TaskDefinition
-	err := coll.FindOne(s.Context, bson.D{{"name", taskName}}).Decode(&result)
+	err := coll.FindOne(s.Context, bson.D{{Key: "name", Value: taskName}}).Decode(&result)
 	if err != nil {
 		if strings.EqualFold(taskName, "work") || strings.EqualFold(taskName, "english") {
 			return true, nil
@@ -390,7 +390,7 @@ func (s *Storage) StatisticTaskGet(taskName string) (int, error) {
 	var taskResult int
 
 	// Search and Collect info from Tasks
-	cursor, err := coll.Find(s.Context, bson.D{{"name", taskName}, {"date", time.Now().Format("2 January 2006")}})
+	cursor, err := coll.Find(s.Context, bson.D{{Key: "name", Value: taskName}, {Key: "date", Value: time.Now().Format("2 January 2006")}})
 	if err != nil {
 		return 0, err
 	}
@@ -433,8 +433,9 @@ func (s *Storage) CreateTask(taskDefinition entity.TaskDefinition) error {
 
 	if err == nil {
 		// Task exists - update it with new values (allows updating params during the day)
-		todayDate := time.Now().Format("2 January 2006")
-		taskDefinition.Date = todayDate
+		if taskDefinition.Date == "" {
+			taskDefinition.Date = time.Now().Format("2 January 2006")
+		}
 		update := bson.M{
 			"$set": bson.M{
 				"role":         taskDefinition.Role,
@@ -455,7 +456,9 @@ func (s *Storage) CreateTask(taskDefinition entity.TaskDefinition) error {
 	}
 
 	// Task doesn't exist - create new one
-	taskDefinition.Date = time.Now().Format("2 January 2006")
+	if taskDefinition.Date == "" {
+		taskDefinition.Date = time.Now().Format("2 January 2006")
+	}
 
 	// Insert into database
 	_, err = coll.InsertOne(s.Context, taskDefinition)
@@ -518,4 +521,16 @@ func (s *Storage) MoveTaskToPreviousDate(taskName string, currentDate string) er
 	}
 
 	return nil
+}
+
+// HasTasksForDate checks if any task definition exists in task_list for the given date.
+func (s *Storage) HasTasksForDate(date string) (bool, error) {
+	coll := s.Client.Database(dbName).Collection(taskNamesList)
+
+	count, err := coll.CountDocuments(s.Context, bson.M{"date": date})
+	if err != nil {
+		return false, fmt.Errorf("has-tasks-for-date: %w", err)
+	}
+
+	return count > 0, nil
 }

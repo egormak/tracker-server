@@ -96,6 +96,14 @@ func (s *Storage) EnsureIndexes(ctx context.Context) error {
 		return fmt.Errorf("failed to create indexes on %s: %w", weeklySchedulesCollection, err)
 	}
 
+	// task_list collection: index on date: 1
+	taskListColl := db.Collection(taskNamesList)
+	_, err = taskListColl.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "date", Value: 1}}},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create indexes on %s: %w", taskNamesList, err)
+	}
+
 	return nil
 }
-

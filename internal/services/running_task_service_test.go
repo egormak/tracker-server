@@ -2,6 +2,8 @@ package services
 
 import (
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 	"tracker-server/internal/domain/entity"
@@ -204,4 +206,248 @@ func TestRunningTaskService_SeamlessSwitching_AutoStopFailure(t *testing.T) {
 	}
 }
 
+type mockRunningTaskNotify struct {
+	startCalls      []string
+	stopCalls       []string
+	completionCalls []completionCall
+}
 
+type completionCall struct {
+	TaskName       string
+	TimeDone       int
+	TodayDone      int
+	TargetDuration int
+	RemainingTasks []string
+	NextTask       string
+	MsgID          int
+}
+
+func (m *mockRunningTaskNotify) SendMessageStart(taskName string) (int, error) {
+	m.startCalls = append(m.startCalls, taskName)
+	return 42, nil
+}
+
+func (m *mockRunningTaskNotify) SendMessageStop(taskName string, timeDone int, msgID int, timeEnd string) error {
+	m.stopCalls = append(m.stopCalls, taskName)
+	return nil
+}
+
+func (m *mockRunningTaskNotify) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int) error {
+	m.completionCalls = append(m.completionCalls, completionCall{
+		TaskName:       taskName,
+		TimeDone:       timeDone,
+		TodayDone:      todayDone,
+		TargetDuration: targetDuration,
+		RemainingTasks: remainingTasks,
+		NextTask:       nextTask,
+		MsgID:          msgID,
+	})
+	return nil
+}
+
+func (m *mockRunningTaskNotify) SendCustomMessage(message string) error {
+	return nil
+}
+
+func TestRunningTaskService_Start_AttachesTelegramMessageID(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+
+	task, err := service.Start("coding", "work", 30, "")
+	if err != nil {
+		t.Fatalf("unexpected error starting task: %v", err)
+	}
+
+	if task.TelegramMessageID != 42 {
+		t.Errorf("expected TelegramMessageID to be 42, got %d", task.TelegramMessageID)
+	}
+	if len(nt.startCalls) != 1 || nt.startCalls[0] != "coding" {
+		t.Errorf("expected SendMessageStart call for 'coding', got %v", nt.startCalls)
+	}
+}
+
+func TestRunningTaskService_Stop_TelegramPushCompletion(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+
+	todayDay := strings.ToLower(time.Now().Weekday().String())
+	var sched entity.WeeklySchedule
+	setDaySchedule(&sched, todayDay, entity.DaySchedule{
+		Day: todayDay,
+		Tasks: []entity.ScheduleTask{
+			{Name: "coding", Time: 25},
+			{Name: "english", Time: 20},
+			{Name: "sport", Time: 30},
+			{Name: "reading", Time: 15},
+		},
+	})
+	storage.activeSchedule = sched
+
+	// english has done=5 < 20 (remaining)
+	// sport has done=30 >= 30 (completed, should NOT be in remaining)
+	// reading has done=0 < 15 (remaining)
+	storage.todayDurations["english"] = 5
+	storage.todayDurations["sport"] = 30
+	storage.todayDurations["reading"] = 0
+	storage.todayDurations["coding"] = 25
+
+	now := time.Now()
+	storage.tasks["coding"] = entity.RunningTask{
+		TaskName:          "coding",
+		Role:              "work",
+		StartTime:         now.Add(-25 * time.Minute),
+		IsRunning:         true,
+		TargetDuration:    25,
+		TelegramMessageID: 101,
+	}
+
+	record, err := service.Stop("coding", "manual")
+	if err != nil {
+		t.Fatalf("unexpected error stopping task: %v", err)
+	}
+
+	if len(nt.completionCalls) != 1 {
+		t.Fatalf("expected 1 completion call, got %d", len(nt.completionCalls))
+	}
+
+	call := nt.completionCalls[0]
+	if call.TaskName != "coding" {
+		t.Errorf("expected TaskName 'coding', got %q", call.TaskName)
+	}
+	if call.TimeDone != record.TimeDuration {
+		t.Errorf("expected TimeDone %d, got %d", record.TimeDuration, call.TimeDone)
+	}
+	if call.TodayDone != 25 {
+		t.Errorf("expected TodayDone 25, got %d", call.TodayDone)
+	}
+	if call.TargetDuration != 25 {
+		t.Errorf("expected TargetDuration 25, got %d", call.TargetDuration)
+	}
+	expectedRemaining := []string{"english", "reading"}
+	if !reflect.DeepEqual(call.RemainingTasks, expectedRemaining) {
+		t.Errorf("expected RemainingTasks %v, got %v", expectedRemaining, call.RemainingTasks)
+	}
+	if call.NextTask != "english" {
+		t.Errorf("expected NextTask 'english', got %q", call.NextTask)
+	}
+	if call.MsgID != 101 {
+		t.Errorf("expected MsgID 101, got %d", call.MsgID)
+	}
+}
+
+func TestRunningTaskService_Stop_TelegramPushCompletion_AllDone(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+
+	todayDay := strings.ToLower(time.Now().Weekday().String())
+	var sched entity.WeeklySchedule
+	setDaySchedule(&sched, todayDay, entity.DaySchedule{
+		Day: todayDay,
+		Tasks: []entity.ScheduleTask{
+			{Name: "coding", Time: 25},
+			{Name: "english", Time: 20},
+		},
+	})
+	storage.activeSchedule = sched
+
+	// All other tasks done
+	storage.todayDurations["english"] = 20
+
+	now := time.Now()
+	storage.tasks["coding"] = entity.RunningTask{
+		TaskName:          "coding",
+		Role:              "work",
+		StartTime:         now.Add(-25 * time.Minute),
+		IsRunning:         true,
+		TargetDuration:    25,
+		TelegramMessageID: 202,
+	}
+
+	_, err := service.Stop("coding", "manual")
+	if err != nil {
+		t.Fatalf("unexpected error stopping task: %v", err)
+	}
+
+	if len(nt.completionCalls) != 1 {
+		t.Fatalf("expected 1 completion call, got %d", len(nt.completionCalls))
+	}
+
+	call := nt.completionCalls[0]
+	if len(call.RemainingTasks) != 0 {
+		t.Errorf("expected 0 remaining tasks, got %v", call.RemainingTasks)
+	}
+	if call.NextTask != "" {
+		t.Errorf("expected empty NextTask, got %q", call.NextTask)
+	}
+	if call.MsgID != 202 {
+		t.Errorf("expected MsgID 202, got %d", call.MsgID)
+	}
+}
+
+func TestRunningTaskService_Stop_TelegramZeroMessageID(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+
+	now := time.Now()
+	// TelegramMessageID is 0
+	storage.tasks["coding"] = entity.RunningTask{
+		TaskName:          "coding",
+		Role:              "work",
+		StartTime:         now.Add(-10 * time.Minute),
+		IsRunning:         true,
+		TargetDuration:    25,
+		TelegramMessageID: 0,
+	}
+
+	_, err := service.Stop("coding", "manual")
+	if err != nil {
+		t.Fatalf("unexpected error stopping task: %v", err)
+	}
+
+	if len(nt.completionCalls) != 0 {
+		t.Errorf("expected 0 completion calls when TelegramMessageID is 0, got %d", len(nt.completionCalls))
+	}
+}
+
+func TestRunningTaskService_Stop_TelegramPushCompletion_BackfillUsesSourceDay(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+
+	todayDay := strings.ToLower(time.Now().Weekday().String())
+	sourceDay := strings.ToLower(time.Now().AddDate(0, 0, -1).Weekday().String())
+	var sched entity.WeeklySchedule
+	setDaySchedule(&sched, todayDay, entity.DaySchedule{Day: todayDay, Tasks: []entity.ScheduleTask{{Name: "coding", Time: 90}}})
+	setDaySchedule(&sched, sourceDay, entity.DaySchedule{Day: sourceDay, Tasks: []entity.ScheduleTask{{Name: "coding", Time: 40}}})
+	storage.activeSchedule = sched
+
+	storage.todayDurations["coding"] = 70
+	storage.dateDurations = map[string]int{"coding|" + sourceDay: 35}
+
+	storage.tasks["coding"] = entity.RunningTask{
+		TaskName:          "coding",
+		Role:              "work",
+		StartTime:         time.Now().Add(-15 * time.Minute),
+		IsRunning:         true,
+		SourceDay:         sourceDay,
+		TelegramMessageID: 303,
+	}
+
+	if _, err := service.Stop("coding", "manual"); err != nil {
+		t.Fatalf("unexpected error stopping task: %v", err)
+	}
+	if len(nt.completionCalls) != 1 {
+		t.Fatalf("expected 1 completion call, got %d", len(nt.completionCalls))
+	}
+	call := nt.completionCalls[0]
+	if call.TodayDone != 35 {
+		t.Errorf("expected TodayDone from source day (35), got %d", call.TodayDone)
+	}
+	if call.TargetDuration != 40 {
+		t.Errorf("expected TargetDuration from source day schedule (40), got %d", call.TargetDuration)
+	}
+}

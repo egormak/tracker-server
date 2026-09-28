@@ -2,16 +2,22 @@ package services
 
 import (
 	"strings"
+	"sync"
 	"testing"
+	"time"
 	"tracker-server/internal/domain/entity"
 )
 
 type MockScheduleStorage struct {
-	schedules      map[string]entity.WeeklySchedule
-	activeID       string
-	records        []entity.TaskRecord
-	taskParams     map[string]entity.TaskParams
-	todayDurations map[string]int
+	schedules         map[string]entity.WeeklySchedule
+	activeID          string
+	records           []entity.TaskRecord
+	taskParams        map[string]entity.TaskParams
+	todayDurations    map[string]int
+	tasksByDate       map[string][]entity.TaskDefinition
+	hasTasksErr       error
+	getDayScheduleErr error
+	timerSetVal       int
 }
 
 func NewMockScheduleStorage() *MockScheduleStorage {
@@ -19,6 +25,7 @@ func NewMockScheduleStorage() *MockScheduleStorage {
 		schedules:      make(map[string]entity.WeeklySchedule),
 		taskParams:     make(map[string]entity.TaskParams),
 		todayDurations: make(map[string]int),
+		tasksByDate:    make(map[string][]entity.TaskDefinition),
 	}
 }
 
@@ -71,6 +78,9 @@ func (m *MockScheduleStorage) SetActiveSchedule(id string) error {
 }
 
 func (m *MockScheduleStorage) GetDaySchedule(day string) (entity.DaySchedule, error) {
+	if m.getDayScheduleErr != nil {
+		return entity.DaySchedule{}, m.getDayScheduleErr
+	}
 	sched := m.schedules[m.activeID]
 	switch day {
 	case "monday":
@@ -137,18 +147,35 @@ func (m *MockScheduleStorage) GetTaskParams(taskName string) (entity.TaskParams,
 }
 
 func (m *MockScheduleStorage) CreateTask(taskDefinition entity.TaskDefinition) error {
+	date := taskDefinition.Date
+	if date == "" {
+		date = time.Now().Format("2 January 2006")
+	}
+	m.tasksByDate[date] = append(m.tasksByDate[date], taskDefinition)
 	return nil
 }
 
 func (m *MockScheduleStorage) GetTaskNamesForDate(date string) ([]string, error) {
-	return []string{}, nil
+	var names []string
+	for _, t := range m.tasksByDate[date] {
+		names = append(names, t.Name)
+	}
+	return names, nil
+}
+
+func (m *MockScheduleStorage) HasTasksForDate(date string) (bool, error) {
+	if m.hasTasksErr != nil {
+		return false, m.hasTasksErr
+	}
+	return len(m.tasksByDate[date]) > 0, nil
 }
 
 func (m *MockScheduleStorage) MoveTaskToPreviousDate(taskName string, currentDate string) error {
 	return nil
 }
 
-func (m *MockScheduleStorage) TimerGlobalSet(timeScheduler int) error {
+func (m *MockScheduleStorage) TimerGlobalSet(timeScheduler int, date ...string) error {
+	m.timerSetVal = timeScheduler
 	return nil
 }
 
@@ -405,5 +432,151 @@ func TestScheduleService_GetRolloverTasks_SourceDayCompletedOnLaterDate(t *testi
 		if r.TaskName == "work" && r.SourceDay == "monday" {
 			t.Errorf("expected no Monday work deficit (fully completed via source_day rollover record), got RemainingTime=%d", r.RemainingTime)
 		}
+	}
+}
+
+func TestScheduleService_EnsureTodaySchedule_AppliesWhenEmpty(t *testing.T) {
+	storage := NewMockScheduleStorage()
+	service := NewScheduleService(storage)
+
+	// Fixed time: Wednesday, 24 September 2026
+	fixedTime := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+	service.SetNowFunc(func() time.Time { return fixedTime })
+
+	sched := entity.WeeklySchedule{
+		ID:       "sched_1",
+		IsActive: true,
+		Wednesday: entity.DaySchedule{
+			Day:       "wednesday",
+			TotalTime: 300,
+			Tasks: []entity.ScheduleTask{
+				{Name: "Coding", Role: "work", Time: 240, Priority: 1},
+				{Name: "Reading", Role: "learn", Time: 60, Priority: 2},
+			},
+		},
+	}
+	storage.schedules["sched_1"] = sched
+	storage.activeID = "sched_1"
+
+	dateStr := fixedTime.Format("2 January 2006")
+	has, _ := storage.HasTasksForDate(dateStr)
+	if has {
+		t.Fatalf("expected no tasks initially for date %s", dateStr)
+	}
+
+	err := service.EnsureTodaySchedule()
+	if err != nil {
+		t.Fatalf("unexpected error from EnsureTodaySchedule: %v", err)
+	}
+
+	hasAfter, _ := storage.HasTasksForDate(dateStr)
+	if !hasAfter {
+		t.Fatalf("expected tasks to exist after EnsureTodaySchedule")
+	}
+
+	if storage.timerSetVal != 300 {
+		t.Errorf("expected timerSetVal to be 300, got %d", storage.timerSetVal)
+	}
+
+	tasks := storage.tasksByDate[dateStr]
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks created, got %d", len(tasks))
+	}
+	if tasks[0].Name != "Coding" || tasks[0].TimeSchedule != 240 {
+		t.Errorf("unexpected task[0]: %+v", tasks[0])
+	}
+	if tasks[1].Name != "Reading" || tasks[1].TimeSchedule != 60 {
+		t.Errorf("unexpected task[1]: %+v", tasks[1])
+	}
+}
+
+func TestScheduleService_EnsureTodaySchedule_IdempotentWhenTasksExist(t *testing.T) {
+	storage := NewMockScheduleStorage()
+	service := NewScheduleService(storage)
+
+	fixedTime := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+	service.SetNowFunc(func() time.Time { return fixedTime })
+	dateStr := fixedTime.Format("2 January 2006")
+
+	sched := entity.WeeklySchedule{
+		ID:       "sched_1",
+		IsActive: true,
+		Wednesday: entity.DaySchedule{
+			Day:       "wednesday",
+			TotalTime: 300,
+			Tasks: []entity.ScheduleTask{
+				{Name: "Coding", Role: "work", Time: 240, Priority: 1},
+			},
+		},
+	}
+	storage.schedules["sched_1"] = sched
+	storage.activeID = "sched_1"
+
+	// Pre-populate a task for today
+	storage.tasksByDate[dateStr] = []entity.TaskDefinition{
+		{Name: "ExistingTask", Role: "work", TimeSchedule: 100, Date: dateStr},
+	}
+	storage.timerSetVal = 100
+
+	err := service.EnsureTodaySchedule()
+	if err != nil {
+		t.Fatalf("unexpected error from EnsureTodaySchedule: %v", err)
+	}
+
+	// Should not re-apply: timer should remain 100, task count 1
+	if storage.timerSetVal != 100 {
+		t.Errorf("expected timer not to change (remain 100), got %d", storage.timerSetVal)
+	}
+	if len(storage.tasksByDate[dateStr]) != 1 {
+		t.Errorf("expected task count to remain 1, got %d", len(storage.tasksByDate[dateStr]))
+	}
+}
+
+func TestScheduleService_EnsureTodaySchedule_Concurrency(t *testing.T) {
+	storage := NewMockScheduleStorage()
+	service := NewScheduleService(storage)
+
+	fixedTime := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+	service.SetNowFunc(func() time.Time { return fixedTime })
+
+	sched := entity.WeeklySchedule{
+		ID:       "sched_1",
+		IsActive: true,
+		Wednesday: entity.DaySchedule{
+			Day:       "wednesday",
+			TotalTime: 200,
+			Tasks: []entity.ScheduleTask{
+				{Name: "TaskA", Role: "work", Time: 200, Priority: 1},
+			},
+		},
+	}
+	storage.schedules["sched_1"] = sched
+	storage.activeID = "sched_1"
+
+	const goroutines = 20
+	var wg sync.WaitGroup
+	errCh := make(chan error, goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := service.EnsureTodaySchedule(); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("concurrent EnsureTodaySchedule error: %v", err)
+	}
+
+	dateStr := fixedTime.Format("2 January 2006")
+	tasks := storage.tasksByDate[dateStr]
+	if len(tasks) != 1 {
+		t.Errorf("expected exactly 1 task created despite 20 concurrent callers, got %d", len(tasks))
 	}
 }

@@ -11,11 +11,17 @@ type MockRunningTaskStorage struct {
 	records              []entity.TaskRecord
 	addTaskRecordErr     error
 	deleteRunningTaskErr error
+	todayDurations       map[string]int
+	dateDurations        map[string]int
+	activeSchedule       entity.WeeklySchedule
+	taskParams           map[string]entity.TaskParams
 }
 
 func NewMockRunningTaskStorage() *MockRunningTaskStorage {
 	return &MockRunningTaskStorage{
-		tasks: make(map[string]entity.RunningTask),
+		tasks:          make(map[string]entity.RunningTask),
+		todayDurations: make(map[string]int),
+		taskParams:     make(map[string]entity.TaskParams),
 	}
 }
 
@@ -81,14 +87,33 @@ func (m *MockRunningTaskStorage) TimeListDelDB(timeDuretion int) error {
 }
 
 func (m *MockRunningTaskStorage) GetTodayTaskDuration(taskName string) (int, error) {
+	if m.todayDurations != nil {
+		if d, ok := m.todayDurations[taskName]; ok {
+			return d, nil
+		}
+	}
+	return 0, nil
+}
+
+func (m *MockRunningTaskStorage) GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error) {
+	if m.dateDurations != nil {
+		if d, ok := m.dateDurations[taskName+"|"+sourceDay]; ok {
+			return d, nil
+		}
+	}
 	return 0, nil
 }
 
 func (m *MockRunningTaskStorage) GetActiveSchedule() (entity.WeeklySchedule, error) {
-	return entity.WeeklySchedule{}, nil
+	return m.activeSchedule, nil
 }
 
 func (m *MockRunningTaskStorage) GetTaskParams(taskName string) (entity.TaskParams, error) {
+	if m.taskParams != nil {
+		if p, ok := m.taskParams[taskName]; ok {
+			return p, nil
+		}
+	}
 	return entity.TaskParams{}, nil
 }
 

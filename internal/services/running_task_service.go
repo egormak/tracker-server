@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 	"tracker-server/internal/domain/entity"
@@ -22,6 +23,7 @@ type RunningTaskStorage interface {
 	AddRest(restTime int) error
 	TimeListDelDB(timeDuretion int) error
 	GetTodayTaskDuration(taskName string) (int, error)
+	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
 	GetActiveSchedule() (entity.WeeklySchedule, error)
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	IsTaskStrict(taskName string) (bool, error)
@@ -230,8 +232,73 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 	}
 
 	if s.nt != nil && task.TelegramMessageID != 0 {
-		timeEnd := time.Now().Format("2 January 2006 15:04")
-		_ = s.nt.SendMessageStop(task.TaskName, record.TimeDuration, task.TelegramMessageID, timeEnd)
+		// A backfilled session (SourceDay set) is recorded against that day, so its
+		// progress and target must come from that day rather than today.
+		todayDone := record.TimeDuration
+		doneFn := func() (int, error) { return s.st.GetTodayTaskDuration(task.TaskName) }
+		if task.SourceDay != "" {
+			doneFn = func() (int, error) { return s.st.GetTaskDurationForDate(task.TaskName, recordDate, task.SourceDay) }
+		}
+		if td, err := doneFn(); err == nil && td > 0 {
+			todayDone = td
+		}
+
+		targetDuration := task.TargetDuration
+		if targetDuration == 0 {
+			if params, err := s.st.GetTaskParams(task.TaskName); err == nil && params.Time > 0 {
+				targetDuration = params.Time
+			}
+		}
+
+		var remainingTasksList []string
+		var nextTask string
+
+		if sched, err := s.st.GetActiveSchedule(); err == nil {
+			todayWeekday := strings.ToLower(time.Now().Weekday().String())
+			daySchedule := getDayScheduleFromWeekly(sched, todayWeekday)
+
+			targetSchedule := daySchedule
+			if task.SourceDay != "" {
+				targetSchedule = getDayScheduleFromWeekly(sched, strings.ToLower(task.SourceDay))
+			}
+			if targetDuration == 0 {
+				for _, st := range targetSchedule.Tasks {
+					if strings.EqualFold(st.Name, task.TaskName) && st.Time > 0 {
+						targetDuration = st.Time
+						break
+					}
+				}
+			}
+
+			seen := make(map[string]bool)
+			for _, st := range daySchedule.Tasks {
+				if strings.EqualFold(st.Name, task.TaskName) {
+					continue
+				}
+				if seen[st.Name] {
+					continue
+				}
+				done, _ := s.st.GetTodayTaskDuration(st.Name)
+				target := st.Time
+				if target == 0 {
+					if p, err := s.st.GetTaskParams(st.Name); err == nil && p.Time > 0 {
+						target = p.Time
+					}
+				}
+				if done < target {
+					seen[st.Name] = true
+					remainingTasksList = append(remainingTasksList, st.Name)
+				}
+			}
+
+			if len(remainingTasksList) > 0 {
+				nextTask = remainingTasksList[0]
+			}
+		}
+
+		if err := s.nt.SendMessageCompletion(task.TaskName, record.TimeDuration, todayDone, targetDuration, remainingTasksList, nextTask, task.TelegramMessageID); err != nil {
+			slog.Error("RunningTaskService: failed to send telegram completion message", "task", task.TaskName, "error", err)
+		}
 	}
 
 	if task.TargetDuration > 0 && record.TimeDuration >= task.TargetDuration {

@@ -31,10 +31,10 @@ func (s *Storage) TimeListSetDB(count int) error {
 	coll := database.Collection(taskInfo)
 
 	// Define the filter to find the document with title "Day List"
-	filter := bson.D{{"title", "Day List"}}
+	filter := bson.D{{Key: "title", Value: "Day List"}}
 
 	// Define the update with the new DayList struct
-	update := bson.D{{"$set", result}}
+	update := bson.D{{Key: "$set", Value: result}}
 
 	// Set the options to upsert the document if it doesn't exist
 	opts := options.Update().SetUpsert(true)
@@ -58,7 +58,7 @@ func (s *Storage) TimeListGetDB() ([]int, error) {
 	coll := database.Collection(taskInfo)
 
 	//Check if Exists Document
-	err := coll.FindOne(s.Context, bson.D{{"title", "Day List"}}).Decode(&result)
+	err := coll.FindOne(s.Context, bson.D{{Key: "title", Value: "Day List"}}).Decode(&result)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (s *Storage) TimeListDelDB(timeDuretion int) error {
 	coll := database.Collection(taskInfo)
 
 	//Check if Exists Document
-	err := coll.FindOne(s.Context, bson.D{{"title", "Day List"}}).Decode(&result)
+	err := coll.FindOne(s.Context, bson.D{{Key: "title", Value: "Day List"}}).Decode(&result)
 	if err != nil {
 		return err
 	}
@@ -93,8 +93,8 @@ func (s *Storage) TimeListDelDB(timeDuretion int) error {
 	}
 
 	// Update Record
-	filter := bson.D{{"title", "Day List"}}
-	update := bson.D{{"$set", result}}
+	filter := bson.D{{Key: "title", Value: "Day List"}}
+	update := bson.D{{Key: "$set", Value: result}}
 	_, err = coll.UpdateOne(s.Context, filter, update)
 	if err != nil {
 		return err
@@ -143,7 +143,7 @@ func (s *Storage) TimeListCountGetDB() int {
 	coll := database.Collection(taskInfo)
 
 	//Check if Exists Document
-	coll.FindOne(s.Context, bson.D{{"title", "Day List"}}).Decode(&result)
+	coll.FindOne(s.Context, bson.D{{Key: "title", Value: "Day List"}}).Decode(&result)
 
 	return result.Count
 }
@@ -177,7 +177,7 @@ func (s *Storage) TimeTasks() (int, error) {
 	return timeTasks, nil
 }
 
-func (s *Storage) TimerGlobalSet(timeScheduler int) error {
+func (s *Storage) TimerGlobalSet(timeScheduler int, date ...string) error {
 
 	// Set Value for DB
 
@@ -185,15 +185,20 @@ func (s *Storage) TimerGlobalSet(timeScheduler int) error {
 	database := s.Client.Database(dbName)
 	coll := database.Collection(taskInfo)
 
+	targetDate := time.Now().Format("2 January 2006")
+	if len(date) > 0 && date[0] != "" {
+		targetDate = date[0]
+	}
+
 	SchedulerRecord := storage.SchedulerInfo{
 		Name:        "Scheduler",
-		Date:        time.Now().Format("2 January 2006"),
+		Date:        targetDate,
 		ScheduleAll: timeScheduler,
 	}
 
-	filter := bson.D{{"name", "Scheduler"}}
+	filter := bson.D{{Key: "name", Value: "Scheduler"}}
 
-	update := bson.D{{"$set", SchedulerRecord}}
+	update := bson.D{{Key: "$set", Value: SchedulerRecord}}
 
 	opts := options.Update().SetUpsert(true)
 
@@ -213,7 +218,7 @@ func (s *Storage) TimerGlobalGet() (int, error) {
 
 	var result storage.SchedulerInfo
 
-	err := coll.FindOne(s.Context, bson.D{{"name", "Scheduler"}}).Decode(&result)
+	err := coll.FindOne(s.Context, bson.D{{Key: "name", Value: "Scheduler"}}).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			// No global timer configured yet; treat as zero instead of 500-ing

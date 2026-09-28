@@ -247,18 +247,18 @@ func TestRamp_RoleFiltering(t *testing.T) {
 		taskName string
 		expected int
 	}{
-		{taskName: "work", expected: 7},              // Direct enabled role
-		{taskName: "learn", expected: 7},             // Direct enabled role
-		{taskName: "coding", expected: 7},            // Role is "work"
-		{taskName: "reading", expected: 7},           // Role is "learn"
-		{taskName: "home_task", expected: 7},         // Direct enabled task
-		{taskName: "video", expected: 15},            // Excluded task
-		{taskName: "movies", expected: 15},           // Excluded task
-		{taskName: "games", expected: 15},            // Excluded task
-		{taskName: "telegram", expected: 15},         // Excluded task
-		{taskName: "gaming", expected: 15},           // Role is "rest"
-		{taskName: "unknown_task", expected: 15},     // Unknown, not eligible
-		{taskName: "", expected: 15},                 // Empty task
+		{taskName: "work", expected: 7},          // Direct enabled role
+		{taskName: "learn", expected: 7},         // Direct enabled role
+		{taskName: "coding", expected: 7},        // Role is "work"
+		{taskName: "reading", expected: 7},       // Role is "learn"
+		{taskName: "home_task", expected: 7},     // Direct enabled task
+		{taskName: "video", expected: 15},        // Excluded task
+		{taskName: "movies", expected: 15},       // Excluded task
+		{taskName: "games", expected: 15},        // Excluded task
+		{taskName: "telegram", expected: 15},     // Excluded task
+		{taskName: "gaming", expected: 15},       // Role is "rest"
+		{taskName: "unknown_task", expected: 15}, // Unknown, not eligible
+		{taskName: "", expected: 15},             // Empty task
 	}
 
 	for _, tc := range tests {
@@ -396,26 +396,32 @@ func (m *mockTaskRecordStorageForRamp) AddTaskRecord(task entity.TaskRecord) err
 	m.records = append(m.records, task)
 	return nil
 }
-func (m *mockTaskRecordStorageForRamp) AddRoleMinutes(task entity.TaskRecord) error    { return nil }
-func (m *mockTaskRecordStorageForRamp) AddRest(restTime int) error                     { return nil }
-func (m *mockTaskRecordStorageForRamp) GetGroupPlanPercent() (int, error)             { return 0, nil }
-func (m *mockTaskRecordStorageForRamp) GetGroupPercent(g int) (int, error)            { return 0, nil }
-func (m *mockTaskRecordStorageForRamp) CheckIfPlanPercentEmpty() error                 { return nil }
-func (m *mockTaskRecordStorageForRamp) ChangeGroupPlanPercent(g int) error            { return nil }
-func (m *mockTaskRecordStorageForRamp) GetGroupName(g int) (string, error)            { return "", nil }
+func (m *mockTaskRecordStorageForRamp) AddRoleMinutes(task entity.TaskRecord) error { return nil }
+func (m *mockTaskRecordStorageForRamp) AddRest(restTime int) error                  { return nil }
+func (m *mockTaskRecordStorageForRamp) GetGroupPlanPercent() (int, error)           { return 0, nil }
+func (m *mockTaskRecordStorageForRamp) GetGroupPercent(g int) (int, error)          { return 0, nil }
+func (m *mockTaskRecordStorageForRamp) CheckIfPlanPercentEmpty() error              { return nil }
+func (m *mockTaskRecordStorageForRamp) ChangeGroupPlanPercent(g int) error          { return nil }
+func (m *mockTaskRecordStorageForRamp) GetGroupName(g int) (string, error)          { return "", nil }
 func (m *mockTaskRecordStorageForRamp) GetTaskNamePlanPercent(g string, p int) (string, error) {
 	return "", nil
 }
-func (m *mockTaskRecordStorageForRamp) DelGroupPercent(g string) error                                  { return nil }
-func (m *mockTaskRecordStorageForRamp) GetTodayTaskDuration(t string) (int, error)                      { return 0, nil }
-func (m *mockTaskRecordStorageForRamp) GetTaskParams(t string) (entity.TaskParams, error)               { return entity.TaskParams{}, nil }
-func (m *mockTaskRecordStorageForRamp) GetActiveSchedule() (entity.WeeklySchedule, error)              { return entity.WeeklySchedule{}, nil }
+func (m *mockTaskRecordStorageForRamp) DelGroupPercent(g string) error             { return nil }
+func (m *mockTaskRecordStorageForRamp) GetTodayTaskDuration(t string) (int, error) { return 0, nil }
+func (m *mockTaskRecordStorageForRamp) GetTaskParams(t string) (entity.TaskParams, error) {
+	return entity.TaskParams{}, nil
+}
+func (m *mockTaskRecordStorageForRamp) GetActiveSchedule() (entity.WeeklySchedule, error) {
+	return entity.WeeklySchedule{}, nil
+}
 func (m *mockTaskRecordStorageForRamp) GetTaskDurationForDate(t string, d string, s string) (int, error) {
 	return 0, nil
 }
-func (m *mockTaskRecordStorageForRamp) IsTaskStrict(t string) (bool, error)      { return false, nil }
-func (m *mockTaskRecordStorageForRamp) GetRecords() ([]entity.TaskRecord, error) { return m.records, nil }
-func (m *mockTaskRecordStorageForRamp) CleanRecords()                            {}
+func (m *mockTaskRecordStorageForRamp) IsTaskStrict(t string) (bool, error) { return false, nil }
+func (m *mockTaskRecordStorageForRamp) GetRecords() ([]entity.TaskRecord, error) {
+	return m.records, nil
+}
+func (m *mockTaskRecordStorageForRamp) CleanRecords() {}
 
 type mockRampRecalculator struct {
 	called   bool

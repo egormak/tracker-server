@@ -100,7 +100,7 @@ func (s *Storage) AddRoleMinutes(t entity.TaskRecord) error {
 	coll := database.Collection(roleInfo)
 
 	// Find the role in the collection
-	err := coll.FindOne(s.Context, bson.D{{"name", t.Role}}).Decode(&result)
+	err := coll.FindOne(s.Context, bson.D{{Key: "name", Value: t.Role}}).Decode(&result)
 	if err != nil {
 		// If the role doesn't exist, insert a new record for it
 		if err == mongo.ErrNoDocuments {
@@ -126,8 +126,8 @@ func (s *Storage) AddRoleMinutes(t entity.TaskRecord) error {
 	}
 
 	// Update the record in the collection
-	filter := bson.D{{"name", t.Role}}
-	update := bson.D{{"$set", result}}
+	filter := bson.D{{Key: "name", Value: t.Role}}
+	update := bson.D{{Key: "$set", Value: result}}
 	_, err = coll.UpdateOne(s.Context, filter, update)
 	if err != nil {
 		return err
@@ -168,7 +168,7 @@ func (s *Storage) GetRole(taskName string) (string, error) {
 
 	// Find the task configuration in the collection
 	var result entity.TaskDefinition
-	err := coll.FindOne(s.Context, bson.D{{"name", taskName}}).Decode(&result)
+	err := coll.FindOne(s.Context, bson.D{{Key: "name", Value: taskName}}).Decode(&result)
 	if err != nil {
 		// Return an error if the task configuration is not found
 		if err == mongo.ErrNoDocuments {
