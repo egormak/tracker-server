@@ -461,3 +461,53 @@ func TestTaskRecordService_WithRampHook(t *testing.T) {
 			recalc.taskName, recalc.duration)
 	}
 }
+
+// TestRamp_GetStatus_ReconcilesStep tests that GetStatus recalculates and updates the step
+// when today's focus minutes exceed the stored step.
+func TestRamp_GetStatus_ReconcilesStep(t *testing.T) {
+	mock := newMockRampStorage()
+	today := time.Now().Format("2 January 2006")
+	mock.ramp.Date = today
+	mock.ramp.CurrentStep = 1
+	mock.ramp.CapMinutes = 25
+	// 15 focus minutes on eligible task should calculate step 6 (CalculateStep(15, 25) == 6)
+	mock.durationsMap["work"] = 15
+
+	svc := NewRampService(mock)
+	ctx := context.Background()
+
+	status, err := svc.GetStatus(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if status.CurrentStep != 6 {
+		t.Errorf("expected reconciled CurrentStep=6, got %d", status.CurrentStep)
+	}
+	if !mock.updateStepCalled {
+		t.Errorf("expected UpdateRampStep to be called to reconcile step in storage")
+	}
+	if mock.lastUpdatedStep != 6 {
+		t.Errorf("expected storage updated with step 6, got %d", mock.lastUpdatedStep)
+	}
+	if mock.ramp.CurrentStep != 6 {
+		t.Errorf("expected storage ramp.CurrentStep=6, got %d", mock.ramp.CurrentStep)
+	}
+
+	// Now check case where focus minutes do NOT exceed current step: should not downgrade step or update storage
+	mock.updateStepCalled = false
+	mock.ramp.CurrentStep = 10
+	mock.durationsMap["work"] = 15 // expectedStep is 6, which is < 10
+
+	status, err = svc.GetStatus(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status.CurrentStep != 10 {
+		t.Errorf("expected CurrentStep to stay at 10, got %d", status.CurrentStep)
+	}
+	if mock.updateStepCalled {
+		t.Errorf("UpdateRampStep should not be called when expected step <= current step")
+	}
+}
+

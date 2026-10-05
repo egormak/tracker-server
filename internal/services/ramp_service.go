@@ -46,6 +46,11 @@ func CalculateStep(focusMinutes int, capMinutes int) int {
 	return k
 }
 
+// CalculateStep computes the ramp step for a given amount of focus minutes.
+func (s *RampService) CalculateStep(focusMinutes int, capMinutes int) int {
+	return CalculateStep(focusMinutes, capMinutes)
+}
+
 // getOrResetRamp loads RampInfo and applies lazy midnight auto-reset if needed.
 func (s *RampService) getOrResetRamp(ctx context.Context) (entity.RampInfo, error) {
 	today := time.Now().Format("2 January 2006")
@@ -142,6 +147,14 @@ func (s *RampService) GetStatus(ctx context.Context) (entity.RampStatus, error) 
 	focusMin, err := s.getTodayFocusMinutes(ctx, ramp, today)
 	if err != nil {
 		return entity.RampStatus{}, fmt.Errorf("failed to get focus minutes: %w", err)
+	}
+
+	expectedStep := s.CalculateStep(focusMin, ramp.CapMinutes)
+	if expectedStep > ramp.CurrentStep {
+		if err := s.st.UpdateRampStep(ctx, expectedStep, today); err != nil {
+			slog.Error("GetStatus: failed to reconcile ramp step in storage", "err", err)
+		}
+		ramp.CurrentStep = expectedStep
 	}
 
 	return ramp.ToStatus(focusMin), nil

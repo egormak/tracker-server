@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -30,10 +31,11 @@ type RunningTaskStorage interface {
 }
 
 type RunningTaskService struct {
-	st  RunningTaskStorage
-	nt  notify.Notify
-	hub *realtime.Hub
-	mu  sync.Mutex
+	st          RunningTaskStorage
+	nt          notify.Notify
+	hub         *realtime.Hub
+	rampService RampRecalculator
+	mu          sync.Mutex
 }
 
 func NewRunningTaskService(st RunningTaskStorage, nt notify.Notify) *RunningTaskService {
@@ -44,6 +46,12 @@ func (s *RunningTaskService) SetHub(hub *realtime.Hub) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.hub = hub
+}
+
+func (s *RunningTaskService) SetRampService(r RampRecalculator) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rampService = r
 }
 
 func (s *RunningTaskService) Start(taskName string, role string, targetDuration int, sourceDay string) (entity.RunningTask, error) {
@@ -229,6 +237,11 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 		if err := s.st.AddRest(record.TimeDuration); err != nil {
 			fmt.Printf("failed to add rest: %v\n", err)
 		}
+		if s.rampService != nil {
+			if err := s.rampService.AutoRecalculateOnRecord(context.Background(), record.Name, record.TimeDuration); err != nil {
+				slog.Error("running_task_service, stopLocked:auto_recalculate_ramp", "err", err)
+			}
+		}
 	}
 
 	if s.nt != nil && task.TelegramMessageID != 0 {
@@ -335,15 +348,20 @@ func (s *RunningTaskService) Pause(taskName string, reasons ...string) (entity.R
 
 	if taskName != "" {
 		task, err = s.st.GetRunningTask(taskName)
+		if err != nil {
+			return entity.RunningTask{}, fmt.Errorf("failed to get task: %w", err)
+		}
+		if task.TaskName == "" {
+			return entity.RunningTask{}, fmt.Errorf("task %q not found or not running", taskName)
+		}
 	} else {
 		task, err = s.st.GetActiveRunningTask()
-	}
-
-	if err != nil {
-		return entity.RunningTask{}, fmt.Errorf("failed to get task: %w", err)
-	}
-	if task.TaskName == "" {
-		return entity.RunningTask{}, fmt.Errorf("no running task found")
+		if err != nil {
+			return entity.RunningTask{}, fmt.Errorf("failed to get task: %w", err)
+		}
+		if task.TaskName == "" {
+			return entity.RunningTask{}, fmt.Errorf("no running task found")
+		}
 	}
 
 	if !task.IsRunning {
@@ -485,7 +503,14 @@ func (s *RunningTaskService) Heartbeat(taskName string) (entity.RunningTask, err
 // Shared by Stop and Adjust so their fallback order can't drift apart.
 func (s *RunningTaskService) resolveTaskOrActive(taskName string) (entity.RunningTask, error) {
 	if taskName != "" {
-		return s.st.GetRunningTask(taskName)
+		task, err := s.st.GetRunningTask(taskName)
+		if err != nil {
+			return entity.RunningTask{}, fmt.Errorf("failed to get task: %w", err)
+		}
+		if task.TaskName == "" {
+			return entity.RunningTask{}, fmt.Errorf("task %q not found or not running", taskName)
+		}
+		return task, nil
 	}
 
 	task, err := s.st.GetActiveRunningTask()

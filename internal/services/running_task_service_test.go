@@ -63,10 +63,22 @@ func TestRunningTaskService_Adjust(t *testing.T) {
 		t.Errorf("expected DeadlineAt to be zeroed when target is 0, got %v", adjusted.DeadlineAt)
 	}
 
-	// 4. Adjust non-existent task should error
+	// 4. Adjust with non-existent task name should error and NOT touch active task
 	_, err = service.Adjust("non_existent", 5)
 	if err == nil {
 		t.Errorf("expected error adjusting non-existent task, got nil")
+	}
+	if storage.tasks["coding"].TargetDuration != 0 {
+		t.Errorf("expected active task 'coding' TargetDuration to remain 0, got %d", storage.tasks["coding"].TargetDuration)
+	}
+
+	// 5. Adjust with empty taskName adjusts the currently active task
+	adjusted, err = service.Adjust("", 15)
+	if err != nil {
+		t.Fatalf("unexpected error adjusting active task with empty name: %v", err)
+	}
+	if adjusted.TaskName != "coding" || adjusted.TargetDuration != 15 {
+		t.Errorf("expected active task 'coding' adjusted to 15, got %s with duration %d", adjusted.TaskName, adjusted.TargetDuration)
 	}
 }
 
@@ -451,3 +463,92 @@ func TestRunningTaskService_Stop_TelegramPushCompletion_BackfillUsesSourceDay(t 
 		t.Errorf("expected TargetDuration from source day schedule (40), got %d", call.TargetDuration)
 	}
 }
+
+func TestRunningTaskService_Pause_ExplicitNamedTaskCannotTouchActiveTask(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	service := NewRunningTaskService(storage, nil)
+
+	now := time.Now()
+	storage.tasks["coding"] = entity.RunningTask{
+		TaskName:       "coding",
+		Role:           "work",
+		StartTime:      now.Add(-10 * time.Minute),
+		Accumulated:    0,
+		IsRunning:      true,
+		TargetDuration: 25,
+	}
+
+	// 1. Calling Pause("stale_task") when a different task is active must return error and NOT touch active task
+	_, err := service.Pause("stale_task")
+	if err == nil {
+		t.Fatalf("expected error pausing stale/non-existent task, got nil")
+	}
+
+	activeTask, ok := storage.tasks["coding"]
+	if !ok || !activeTask.IsRunning {
+		t.Fatalf("active task 'coding' was mutated or paused by stale task pause")
+	}
+
+	// 2. Calling Adjust("stale_task", 5) when a different task is active must return error and NOT touch active task
+	_, err = service.Adjust("stale_task", 5)
+	if err == nil {
+		t.Fatalf("expected error adjusting stale/non-existent task, got nil")
+	}
+	if storage.tasks["coding"].TargetDuration != 25 {
+		t.Fatalf("active task 'coding' TargetDuration was mutated by stale task adjust")
+	}
+
+	// 3. Calling Pause("") pauses the active task
+	paused, err := service.Pause("")
+	if err != nil {
+		t.Fatalf("unexpected error pausing active task with empty name: %v", err)
+	}
+	if paused.TaskName != "coding" {
+		t.Errorf("expected paused task to be 'coding', got '%s'", paused.TaskName)
+	}
+	if paused.IsRunning {
+		t.Errorf("expected paused task to have IsRunning=false")
+	}
+	if paused.Accumulated < 10 {
+		t.Errorf("expected accumulated duration >= 10, got %d", paused.Accumulated)
+	}
+
+	// 4. Calling Pause("") when no active task exists should error
+	_, err = service.Pause("")
+	if err == nil {
+		t.Errorf("expected error pausing with no active task, got nil")
+	}
+}
+
+func TestRunningTaskService_Stop_CallsAutoRecalculateOnRecord(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	service := NewRunningTaskService(storage, nil)
+	rampMock := &mockRampRecalculator{}
+	service.SetRampService(rampMock)
+
+	now := time.Now()
+	storage.tasks["coding"] = entity.RunningTask{
+		TaskName:       "coding",
+		Role:           "work",
+		StartTime:      now.Add(-20 * time.Minute),
+		Accumulated:    0,
+		IsRunning:      true,
+		TargetDuration: 25,
+	}
+
+	record, err := service.Stop("coding", "manual")
+	if err != nil {
+		t.Fatalf("unexpected error stopping task: %v", err)
+	}
+
+	if !rampMock.called {
+		t.Fatalf("expected AutoRecalculateOnRecord to be called")
+	}
+	if rampMock.taskName != "coding" {
+		t.Errorf("expected taskName 'coding', got '%s'", rampMock.taskName)
+	}
+	if rampMock.duration != record.TimeDuration {
+		t.Errorf("expected duration %d, got %d", record.TimeDuration, rampMock.duration)
+	}
+}
+

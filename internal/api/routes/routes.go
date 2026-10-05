@@ -23,6 +23,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	statsService := services.NewStatisticService(mongoconn, scheduleService)
 	manageService := services.NewManageService(mongoconn)
 	runningTaskService := services.NewRunningTaskService(mongoconn, notify)
+	runningTaskService.SetRampService(rampService)
 	if hub != nil {
 		runningTaskService.SetHub(hub)
 	}
