@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"strings"
+	"sync"
 	"time"
 	"tracker-server/internal/domain/entity"
 )
@@ -14,7 +15,8 @@ import (
 type RampStorage interface {
 	GetRampInfo(ctx context.Context) (entity.RampInfo, error)
 	SaveRampInfo(ctx context.Context, ramp entity.RampInfo) error
-	ResetRampStep(ctx context.Context, date string) error
+	ResetRampStep(ctx context.Context, date string, baselineMinutes int) error
+	UpdateRampBaseline(ctx context.Context, baselineMinutes int) error
 	UpdateRampStep(ctx context.Context, step int, date string) error
 	GetRole(taskName string) (string, error)
 	GetTodayTaskDurationsMap(date string) (map[string]int, error)
@@ -23,6 +25,8 @@ type RampStorage interface {
 // RampService manages linear warm-up ramp progression, configuration, and eligibility.
 type RampService struct {
 	st RampStorage
+	// mu serializes the read-modify-write sequences on the Ramp Info document.
+	mu sync.Mutex
 }
 
 // NewRampService creates a new RampService instance.
@@ -65,11 +69,12 @@ func (s *RampService) getOrResetRamp(ctx context.Context) (entity.RampInfo, erro
 			"today", today,
 			"prev_step", ramp.CurrentStep,
 		)
-		if err := s.st.ResetRampStep(ctx, today); err != nil {
+		if err := s.st.ResetRampStep(ctx, today, 0); err != nil {
 			return entity.RampInfo{}, fmt.Errorf("failed to reset ramp step on midnight: %w", err)
 		}
 		ramp.CurrentStep = 1
 		ramp.Date = today
+		ramp.ResetBaselineMinutes = 0
 	}
 
 	return ramp, nil
@@ -136,8 +141,24 @@ func (s *RampService) getTodayFocusMinutes(ctx context.Context, ramp entity.Ramp
 	return total, nil
 }
 
+// effectiveFocus returns the focus minutes counted since the last manual reset.
+// If today's focus dropped below the baseline (a record was removed or became ineligible),
+// the baseline is lowered to match so later focus minutes keep advancing the ramp.
+func (s *RampService) effectiveFocus(ctx context.Context, ramp *entity.RampInfo, focusMin int) int {
+	if focusMin < ramp.ResetBaselineMinutes {
+		if err := s.st.UpdateRampBaseline(ctx, focusMin); err != nil {
+			slog.Error("failed to lower ramp reset baseline in storage", "err", err)
+		}
+		ramp.ResetBaselineMinutes = focusMin
+	}
+	return ramp.EffectiveFocusMinutes(focusMin)
+}
+
 // GetStatus returns the current RampStatus with lazy midnight auto-reset applied.
 func (s *RampService) GetStatus(ctx context.Context) (entity.RampStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	ramp, err := s.getOrResetRamp(ctx)
 	if err != nil {
 		return entity.RampStatus{}, err
@@ -149,7 +170,9 @@ func (s *RampService) GetStatus(ctx context.Context) (entity.RampStatus, error) 
 		return entity.RampStatus{}, fmt.Errorf("failed to get focus minutes: %w", err)
 	}
 
-	expectedStep := s.CalculateStep(focusMin, ramp.CapMinutes)
+	effectiveFocus := s.effectiveFocus(ctx, &ramp, focusMin)
+
+	expectedStep := s.CalculateStep(effectiveFocus, ramp.CapMinutes)
 	if expectedStep > ramp.CurrentStep {
 		if err := s.st.UpdateRampStep(ctx, expectedStep, today); err != nil {
 			slog.Error("GetStatus: failed to reconcile ramp step in storage", "err", err)
@@ -162,6 +185,9 @@ func (s *RampService) GetStatus(ctx context.Context) (entity.RampStatus, error) 
 
 // GetDurationForTask checks eligibility and returns current_step or default_rest_fallback.
 func (s *RampService) GetDurationForTask(ctx context.Context, taskName string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	ramp, err := s.getOrResetRamp(ctx)
 	if err != nil {
 		return 0, err
@@ -187,29 +213,36 @@ func (s *RampService) GetDurationForTask(ctx context.Context, taskName string) (
 
 // Reset manually resets the current step to 1.
 func (s *RampService) Reset(ctx context.Context) (entity.RampStatus, error) {
-	today := time.Now().Format("2 January 2006")
-	if err := s.st.ResetRampStep(ctx, today); err != nil {
-		return entity.RampStatus{}, fmt.Errorf("failed to reset ramp step: %w", err)
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	ramp, err := s.st.GetRampInfo(ctx)
+	ramp, err := s.getOrResetRamp(ctx)
 	if err != nil {
-		return entity.RampStatus{}, fmt.Errorf("failed to get ramp info: %w", err)
+		return entity.RampStatus{}, err
 	}
-	ramp.CurrentStep = 1
-	ramp.Date = today
 
+	today := time.Now().Format("2 January 2006")
 	focusMin, err := s.getTodayFocusMinutes(ctx, ramp, today)
 	if err != nil {
 		return entity.RampStatus{}, fmt.Errorf("failed to get focus minutes: %w", err)
 	}
 
-	slog.Info("Ramp manual reset performed", "date", today, "current_step", ramp.CurrentStep)
+	if err := s.st.ResetRampStep(ctx, today, focusMin); err != nil {
+		return entity.RampStatus{}, fmt.Errorf("failed to reset ramp step: %w", err)
+	}
+	ramp.CurrentStep = 1
+	ramp.Date = today
+	ramp.ResetBaselineMinutes = focusMin
+
+	slog.Info("Ramp manual reset performed", "date", today, "current_step", ramp.CurrentStep, "reset_baseline_minutes", ramp.ResetBaselineMinutes)
 	return ramp.ToStatus(focusMin), nil
 }
 
 // Advance manually increments the step by 1, clamped to CapMinutes.
 func (s *RampService) Advance(ctx context.Context) (entity.RampStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	ramp, err := s.getOrResetRamp(ctx)
 	if err != nil {
 		return entity.RampStatus{}, err
@@ -237,6 +270,9 @@ func (s *RampService) Advance(ctx context.Context) (entity.RampStatus, error) {
 
 // GetConfig returns the current ramp configuration.
 func (s *RampService) GetConfig(ctx context.Context) (entity.RampConfig, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	ramp, err := s.getOrResetRamp(ctx)
 	if err != nil {
 		return entity.RampConfig{}, err
@@ -253,12 +289,24 @@ func (s *RampService) UpdateConfig(ctx context.Context, cfg entity.RampConfig) (
 		return entity.RampStatus{}, fmt.Errorf("default_rest_fallback must be at least 1")
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	ramp, err := s.getOrResetRamp(ctx)
 	if err != nil {
 		return entity.RampStatus{}, err
 	}
 
 	today := time.Now().Format("2 January 2006")
+	focusBefore := 0
+	if ramp.ResetBaselineMinutes > 0 {
+		focusBefore, err = s.getTodayFocusMinutes(ctx, ramp, today)
+		if err != nil {
+			return entity.RampStatus{}, fmt.Errorf("failed to get focus minutes: %w", err)
+		}
+	}
+	hadBaseline := ramp.ResetBaselineMinutes > 0
+
 	ramp.CapMinutes = cfg.CapMinutes
 	if cfg.EnabledRoles != nil {
 		ramp.EnabledRoles = cfg.EnabledRoles
@@ -275,13 +323,26 @@ func (s *RampService) UpdateConfig(ctx context.Context, cfg entity.RampConfig) (
 		ramp.CurrentStep = ramp.CapMinutes
 	}
 
-	if err := s.st.SaveRampInfo(ctx, ramp); err != nil {
-		return entity.RampStatus{}, fmt.Errorf("failed to save ramp info: %w", err)
-	}
-
 	focusMin, err := s.getTodayFocusMinutes(ctx, ramp, today)
 	if err != nil {
 		return entity.RampStatus{}, fmt.Errorf("failed to get focus minutes: %w", err)
+	}
+
+	// Eligibility may have changed: shift the manual-reset baseline by the same amount
+	// so focus counted since the reset stays the same.
+	if hadBaseline {
+		baseline := ramp.ResetBaselineMinutes + focusMin - focusBefore
+		if baseline < 0 {
+			baseline = 0
+		}
+		if baseline > focusMin {
+			baseline = focusMin
+		}
+		ramp.ResetBaselineMinutes = baseline
+	}
+
+	if err := s.st.SaveRampInfo(ctx, ramp); err != nil {
+		return entity.RampStatus{}, fmt.Errorf("failed to save ramp info: %w", err)
 	}
 
 	slog.Info("Ramp configuration updated",
@@ -294,6 +355,9 @@ func (s *RampService) UpdateConfig(ctx context.Context, cfg entity.RampConfig) (
 // AutoRecalculateOnRecord calculates progression step k from today's focus minutes
 // and advances current_step if k > current_step.
 func (s *RampService) AutoRecalculateOnRecord(ctx context.Context, taskName string, duration int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	ramp, err := s.getOrResetRamp(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get ramp info for auto-recalculate: %w", err)
@@ -310,12 +374,15 @@ func (s *RampService) AutoRecalculateOnRecord(ctx context.Context, taskName stri
 		return fmt.Errorf("failed to get today focus minutes for recalculate: %w", err)
 	}
 
-	k := CalculateStep(focusMin, ramp.CapMinutes)
+	effectiveFocus := s.effectiveFocus(ctx, &ramp, focusMin)
+
+	k := CalculateStep(effectiveFocus, ramp.CapMinutes)
 	if k > ramp.CurrentStep {
 		slog.Info("Auto-advancing ramp step on record",
 			"prev_step", ramp.CurrentStep,
 			"new_step", k,
 			"today_focus_minutes", focusMin,
+			"effective_focus_minutes", effectiveFocus,
 			"task", taskName,
 		)
 		if err := s.st.UpdateRampStep(ctx, k, today); err != nil {

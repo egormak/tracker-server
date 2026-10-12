@@ -489,7 +489,7 @@ paths:
       tags:
         - Ramp
       summary: Get Linear Warm-Up Ramp status
-      description: Returns current ramp step, cap minutes, whether ramp is capped, today's focus minutes, and current configuration with automatic midnight reset.
+      description: Returns current ramp step, cap minutes, whether ramp is capped, today's focus minutes, and current configuration with automatic midnight reset. After a manual reset the step is derived from effective_focus_minutes (today_focus_minutes minus reset_baseline_minutes), not from today_focus_minutes.
       operationId: getRampStatus
       responses:
         '200':
@@ -510,7 +510,7 @@ paths:
       tags:
         - Ramp
       summary: Reset warm-up ramp step to 1
-      description: Manually resets current warm-up step to 1 minute.
+      description: Manually resets current warm-up step to 1 minute and stores today's focus minutes as reset_baseline_minutes, so only focus logged after the reset advances the ramp for the rest of the day.
       operationId: resetRamp
       responses:
         '200':
@@ -2945,6 +2945,14 @@ components:
           type: integer
           description: Total focus minutes completed today on eligible tasks
           example: 6
+        reset_baseline_minutes:
+          type: integer
+          description: Today's focus minutes at the time of the last manual reset (0 if the ramp was not manually reset today)
+          example: 0
+        effective_focus_minutes:
+          type: integer
+          description: Focus minutes that drive current_step (today_focus_minutes minus reset_baseline_minutes, never negative)
+          example: 6
         date:
           type: string
           description: Date for which current step applies
@@ -2956,6 +2964,8 @@ components:
         - cap_minutes
         - is_capped
         - today_focus_minutes
+        - reset_baseline_minutes
+        - effective_focus_minutes
         - date
         - config
 

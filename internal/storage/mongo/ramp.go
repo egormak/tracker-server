@@ -49,6 +49,9 @@ func (s *Storage) GetRampInfo(ctx context.Context) (entity.RampInfo, error) {
 	if ramp.Date == "" {
 		ramp.Date = time.Now().Format("2 January 2006")
 	}
+	if ramp.ResetBaselineMinutes < 0 {
+		ramp.ResetBaselineMinutes = 0
+	}
 
 	return ramp, nil
 }
@@ -76,8 +79,9 @@ func (s *Storage) SaveRampInfo(ctx context.Context, ramp entity.RampInfo) error 
 	return nil
 }
 
-// ResetRampStep resets current_step to 1 and updates the date.
-func (s *Storage) ResetRampStep(ctx context.Context, date string) error {
+// ResetRampStep resets current_step to 1, updates the date and sets the reset baseline
+// (0 for the midnight reset, today's focus minutes for a manual reset).
+func (s *Storage) ResetRampStep(ctx context.Context, date string, baselineMinutes int) error {
 	if ctx == nil {
 		ctx = s.Context
 	}
@@ -90,9 +94,10 @@ func (s *Storage) ResetRampStep(ctx context.Context, date string) error {
 		bson.M{"title": rampDocName},
 		bson.M{
 			"$set": bson.M{
-				"current_step": 1,
-				"date":         date,
-				"updated_at":   now,
+				"current_step":           1,
+				"date":                   date,
+				"reset_baseline_minutes": baselineMinutes,
+				"updated_at":             now,
 			},
 			"$setOnInsert": bson.M{
 				"title":                 rampDocName,
@@ -142,6 +147,29 @@ func (s *Storage) UpdateRampStep(ctx context.Context, step int, date string) err
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update ramp step: %w", err)
+	}
+	return nil
+}
+
+// UpdateRampBaseline updates only the manual-reset baseline of today's focus minutes.
+func (s *Storage) UpdateRampBaseline(ctx context.Context, baselineMinutes int) error {
+	if ctx == nil {
+		ctx = s.Context
+	}
+	coll := s.Client.Database(dbName).Collection(taskInfo)
+
+	_, err := coll.UpdateOne(
+		ctx,
+		bson.M{"title": rampDocName},
+		bson.M{
+			"$set": bson.M{
+				"reset_baseline_minutes": baselineMinutes,
+				"updated_at":             time.Now().UTC(),
+			},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update ramp baseline: %w", err)
 	}
 	return nil
 }

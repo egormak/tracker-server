@@ -18,10 +18,11 @@ type mockRampStorage struct {
 	resetErr     error
 	updateErr    error
 
-	resetStepCalled  bool
-	updateStepCalled bool
-	saveInfoCalled   bool
-	lastUpdatedStep  int
+	resetStepCalled      bool
+	updateStepCalled     bool
+	updateBaselineCalled bool
+	saveInfoCalled       bool
+	lastUpdatedStep      int
 }
 
 func newMockRampStorage() *mockRampStorage {
@@ -48,13 +49,20 @@ func (m *mockRampStorage) SaveRampInfo(ctx context.Context, ramp entity.RampInfo
 	return nil
 }
 
-func (m *mockRampStorage) ResetRampStep(ctx context.Context, date string) error {
+func (m *mockRampStorage) ResetRampStep(ctx context.Context, date string, baselineMinutes int) error {
 	if m.resetErr != nil {
 		return m.resetErr
 	}
 	m.resetStepCalled = true
 	m.ramp.CurrentStep = 1
 	m.ramp.Date = date
+	m.ramp.ResetBaselineMinutes = baselineMinutes
+	return nil
+}
+
+func (m *mockRampStorage) UpdateRampBaseline(ctx context.Context, baselineMinutes int) error {
+	m.updateBaselineCalled = true
+	m.ramp.ResetBaselineMinutes = baselineMinutes
 	return nil
 }
 
@@ -146,6 +154,7 @@ func TestRamp_MidnightReset(t *testing.T) {
 	mock := newMockRampStorage()
 	mock.ramp.Date = "22 September 2026"
 	mock.ramp.CurrentStep = 12
+	mock.ramp.ResetBaselineMinutes = 45
 
 	svc := NewRampService(mock)
 	ctx := context.Background()
@@ -166,6 +175,9 @@ func TestRamp_MidnightReset(t *testing.T) {
 
 	if !mock.resetStepCalled {
 		t.Errorf("expected ResetRampStep to be called on storage")
+	}
+	if mock.ramp.ResetBaselineMinutes != 0 {
+		t.Errorf("expected ResetBaselineMinutes=0 after midnight reset")
 	}
 }
 
@@ -188,6 +200,16 @@ func TestRamp_ManualReset(t *testing.T) {
 	}
 	if !mock.resetStepCalled {
 		t.Errorf("expected ResetRampStep to be called on storage")
+	}
+	if mock.saveInfoCalled {
+		t.Errorf("manual reset must not rewrite the whole ramp document")
+	}
+	if mock.ramp.ResetBaselineMinutes != 45 {
+		t.Errorf("expected ResetBaselineMinutes=45, got %d", mock.ramp.ResetBaselineMinutes)
+	}
+	if status.ResetBaselineMinutes != 45 || status.EffectiveFocusMinutes != 0 {
+		t.Errorf("expected status baseline=45 and effective focus=0, got %d and %d",
+			status.ResetBaselineMinutes, status.EffectiveFocusMinutes)
 	}
 }
 
@@ -511,3 +533,177 @@ func TestRamp_GetStatus_ReconcilesStep(t *testing.T) {
 	}
 }
 
+// TestRamp_ManualReset_PreservedAcrossGetStatus tests that when today's focus is 45 minutes,
+// calling Reset(ctx) sets step to 1, subsequent GetStatus retains CurrentStep = 1,
+// and adding 1 minute of focus advances step to 2.
+func TestRamp_ManualReset_PreservedAcrossGetStatus(t *testing.T) {
+	mock := newMockRampStorage()
+	today := time.Now().Format("2 January 2006")
+	mock.ramp.Date = today
+	mock.ramp.CapMinutes = 25
+	mock.roles["work"] = "work"
+	// User has 45 focus minutes today
+	mock.durationsMap["work"] = 45
+	mock.ramp.CurrentStep = 9
+
+	svc := NewRampService(mock)
+	ctx := context.Background()
+
+	// 1. Calling Reset(ctx) sets step to 1
+	resetStatus, err := svc.Reset(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error on Reset: %v", err)
+	}
+	if resetStatus.CurrentStep != 1 {
+		t.Fatalf("expected CurrentStep=1 after Reset, got %d", resetStatus.CurrentStep)
+	}
+	if mock.ramp.ResetBaselineMinutes != 45 {
+		t.Errorf("expected ResetBaselineMinutes=45 after Reset, got %d", mock.ramp.ResetBaselineMinutes)
+	}
+
+	// 2. Subsequent GetStatus retains CurrentStep = 1 instead of jumping back to prior step
+	status, err := svc.GetStatus(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error on GetStatus: %v", err)
+	}
+	if status.CurrentStep != 1 {
+		t.Errorf("expected CurrentStep=1 retained across GetStatus, got %d", status.CurrentStep)
+	}
+	if status.TodayFocusMinutes != 45 {
+		t.Errorf("expected TodayFocusMinutes=45, got %d", status.TodayFocusMinutes)
+	}
+
+	// 3. Adding a new task record with 1 minute of focus advances step to 2 via AutoRecalculateOnRecord
+	mock.durationsMap["work"] = 46 // 45 baseline + 1 new minute = 46 total
+	err = svc.AutoRecalculateOnRecord(ctx, "work", 1)
+	if err != nil {
+		t.Fatalf("unexpected error on AutoRecalculateOnRecord: %v", err)
+	}
+	if mock.ramp.CurrentStep != 2 {
+		t.Errorf("expected CurrentStep=2 after 1 min focus post-reset, got %d", mock.ramp.CurrentStep)
+	}
+	if !mock.updateStepCalled {
+		t.Errorf("expected UpdateRampStep to be called on auto-recalculate")
+	}
+	if mock.lastUpdatedStep != 2 {
+		t.Errorf("expected lastUpdatedStep=2, got %d", mock.lastUpdatedStep)
+	}
+
+	// 4. Verify subsequent GetStatus also returns step 2
+	status, err = svc.GetStatus(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error on subsequent GetStatus: %v", err)
+	}
+	if status.CurrentStep != 2 {
+		t.Errorf("expected CurrentStep=2 on subsequent GetStatus, got %d", status.CurrentStep)
+	}
+	if status.TodayFocusMinutes != 46 {
+		t.Errorf("expected TodayFocusMinutes=46, got %d", status.TodayFocusMinutes)
+	}
+	if status.EffectiveFocusMinutes != 1 {
+		t.Errorf("expected EffectiveFocusMinutes=1, got %d", status.EffectiveFocusMinutes)
+	}
+}
+
+// TestRamp_ManualReset_BaselineRebasedOnConfigChange tests that changing eligibility after
+// a manual reset neither freezes the ramp nor undoes the reset.
+func TestRamp_ManualReset_BaselineRebasedOnConfigChange(t *testing.T) {
+	newResetService := func(t *testing.T) (*mockRampStorage, *RampService) {
+		mock := newMockRampStorage()
+		mock.roles["coding"] = "work"
+		mock.roles["reading"] = "learn"
+		mock.roles["chores"] = "home"
+		mock.durationsMap["coding"] = 30
+		mock.durationsMap["reading"] = 15
+		mock.durationsMap["chores"] = 60
+		svc := NewRampService(mock)
+		if _, err := svc.Reset(context.Background()); err != nil {
+			t.Fatalf("unexpected error on Reset: %v", err)
+		}
+		if mock.ramp.ResetBaselineMinutes != 45 {
+			t.Fatalf("expected ResetBaselineMinutes=45 after Reset, got %d", mock.ramp.ResetBaselineMinutes)
+		}
+		return mock, svc
+	}
+	ctx := context.Background()
+
+	t.Run("Removing a role keeps the ramp advancing", func(t *testing.T) {
+		mock, svc := newResetService(t)
+
+		status, err := svc.UpdateConfig(ctx, entity.RampConfig{
+			CapMinutes: 25, EnabledRoles: []string{"work"}, DefaultRestFallback: 15,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error on UpdateConfig: %v", err)
+		}
+		if status.ResetBaselineMinutes != 30 || status.EffectiveFocusMinutes != 0 {
+			t.Errorf("expected baseline=30 and effective focus=0, got %d and %d",
+				status.ResetBaselineMinutes, status.EffectiveFocusMinutes)
+		}
+
+		mock.durationsMap["coding"] = 31
+		if err := svc.AutoRecalculateOnRecord(ctx, "coding", 1); err != nil {
+			t.Fatalf("unexpected error on AutoRecalculateOnRecord: %v", err)
+		}
+		if mock.ramp.CurrentStep != 2 {
+			t.Errorf("expected CurrentStep=2 after 1 min focus post-reset, got %d", mock.ramp.CurrentStep)
+		}
+	})
+
+	t.Run("Adding a role with logged minutes does not undo the reset", func(t *testing.T) {
+		mock, svc := newResetService(t)
+
+		if _, err := svc.UpdateConfig(ctx, entity.RampConfig{
+			CapMinutes: 25, EnabledRoles: []string{"work", "learn", "home"}, DefaultRestFallback: 15,
+		}); err != nil {
+			t.Fatalf("unexpected error on UpdateConfig: %v", err)
+		}
+		if mock.ramp.ResetBaselineMinutes != 105 {
+			t.Errorf("expected ResetBaselineMinutes=105, got %d", mock.ramp.ResetBaselineMinutes)
+		}
+
+		status, err := svc.GetStatus(ctx)
+		if err != nil {
+			t.Fatalf("unexpected error on GetStatus: %v", err)
+		}
+		if status.CurrentStep != 1 {
+			t.Errorf("expected CurrentStep=1 retained after config change, got %d", status.CurrentStep)
+		}
+	})
+}
+
+// TestRamp_ManualReset_BaselineLoweredWhenFocusDrops tests that when today's focus falls
+// below the reset baseline, the baseline follows it down so new focus still advances the ramp.
+func TestRamp_ManualReset_BaselineLoweredWhenFocusDrops(t *testing.T) {
+	mock := newMockRampStorage()
+	mock.roles["work"] = "work"
+	mock.durationsMap["work"] = 45
+
+	svc := NewRampService(mock)
+	ctx := context.Background()
+
+	if _, err := svc.Reset(ctx); err != nil {
+		t.Fatalf("unexpected error on Reset: %v", err)
+	}
+
+	// A record is corrected: today's total drops from 45 to 20.
+	mock.durationsMap["work"] = 20
+	status, err := svc.GetStatus(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error on GetStatus: %v", err)
+	}
+	if status.CurrentStep != 1 {
+		t.Errorf("expected CurrentStep=1, got %d", status.CurrentStep)
+	}
+	if !mock.updateBaselineCalled || mock.ramp.ResetBaselineMinutes != 20 {
+		t.Errorf("expected baseline lowered to 20 in storage, got %d", mock.ramp.ResetBaselineMinutes)
+	}
+
+	mock.durationsMap["work"] = 23
+	if err := svc.AutoRecalculateOnRecord(ctx, "work", 3); err != nil {
+		t.Fatalf("unexpected error on AutoRecalculateOnRecord: %v", err)
+	}
+	if mock.ramp.CurrentStep != 3 {
+		t.Errorf("expected CurrentStep=3 after 3 min focus post-drop, got %d", mock.ramp.CurrentStep)
+	}
+}

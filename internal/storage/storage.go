@@ -75,6 +75,7 @@ type Storage interface {
 	// Warm-up Ramp
 	GetRampInfo(ctx context.Context) (entity.RampInfo, error)
 	SaveRampInfo(ctx context.Context, ramp entity.RampInfo) error
-	ResetRampStep(ctx context.Context, date string) error
+	ResetRampStep(ctx context.Context, date string, baselineMinutes int) error
+	UpdateRampBaseline(ctx context.Context, baselineMinutes int) error
 	UpdateRampStep(ctx context.Context, step int, date string) error
 }
