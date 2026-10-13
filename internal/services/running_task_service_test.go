@@ -232,6 +232,7 @@ type completionCall struct {
 	RemainingTasks []string
 	NextTask       string
 	MsgID          int
+	BreakOptions   []entity.BreakOption
 }
 
 func (m *mockRunningTaskNotify) SendMessageStart(taskName string) (int, error) {
@@ -244,7 +245,7 @@ func (m *mockRunningTaskNotify) SendMessageStop(taskName string, timeDone int, m
 	return nil
 }
 
-func (m *mockRunningTaskNotify) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int) error {
+func (m *mockRunningTaskNotify) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int, breakOptions []entity.BreakOption) error {
 	m.completionCalls = append(m.completionCalls, completionCall{
 		TaskName:       taskName,
 		TimeDone:       timeDone,
@@ -253,6 +254,7 @@ func (m *mockRunningTaskNotify) SendMessageCompletion(taskName string, timeDone 
 		RemainingTasks: remainingTasks,
 		NextTask:       nextTask,
 		MsgID:          msgID,
+		BreakOptions:   breakOptions,
 	})
 	return nil
 }
@@ -552,3 +554,53 @@ func TestRunningTaskService_Stop_CallsAutoRecalculateOnRecord(t *testing.T) {
 	}
 }
 
+type mockBreakOptionsProvider struct {
+	calls int
+}
+
+func (m *mockBreakOptionsProvider) GetBreakOptions() (entity.BreakOptionsResponse, error) {
+	m.calls++
+	return entity.BreakOptionsResponse{
+		Options: []entity.BreakOption{{TaskName: "movies", Role: "rest", IsVariety: true}},
+	}, nil
+}
+
+func TestRunningTaskService_Stop_BreakOptionsOnlyAfterFocusBlock(t *testing.T) {
+	cases := []struct {
+		role        string
+		wantOptions int
+	}{
+		{role: "work", wantOptions: 1},
+		{role: "learn", wantOptions: 1},
+		{role: "rest", wantOptions: 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.role, func(t *testing.T) {
+			storage := NewMockRunningTaskStorage()
+			nt := &mockRunningTaskNotify{}
+			provider := &mockBreakOptionsProvider{}
+			service := NewRunningTaskService(storage, nt)
+			service.SetBreakOptionsProvider(provider)
+
+			storage.tasks["task"] = entity.RunningTask{
+				TaskName:          "task",
+				Role:              tc.role,
+				StartTime:         time.Now().Add(-25 * time.Minute),
+				IsRunning:         true,
+				TargetDuration:    25,
+				TelegramMessageID: 101,
+			}
+
+			if _, err := service.Stop("task", "manual"); err != nil {
+				t.Fatalf("unexpected error stopping task: %v", err)
+			}
+			if len(nt.completionCalls) != 1 {
+				t.Fatalf("expected 1 completion call, got %d", len(nt.completionCalls))
+			}
+			if got := len(nt.completionCalls[0].BreakOptions); got != tc.wantOptions {
+				t.Errorf("role %s: expected %d break options, got %d", tc.role, tc.wantOptions, got)
+			}
+		})
+	}
+}

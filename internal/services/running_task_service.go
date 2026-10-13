@@ -30,12 +30,17 @@ type RunningTaskStorage interface {
 	IsTaskStrict(taskName string) (bool, error)
 }
 
+type BreakOptionsProvider interface {
+	GetBreakOptions() (entity.BreakOptionsResponse, error)
+}
+
 type RunningTaskService struct {
-	st          RunningTaskStorage
-	nt          notify.Notify
-	hub         *realtime.Hub
-	rampService RampRecalculator
-	mu          sync.Mutex
+	st           RunningTaskStorage
+	nt           notify.Notify
+	hub          *realtime.Hub
+	rampService  RampRecalculator
+	breakOptions BreakOptionsProvider
+	mu           sync.Mutex
 }
 
 func NewRunningTaskService(st RunningTaskStorage, nt notify.Notify) *RunningTaskService {
@@ -46,6 +51,13 @@ func (s *RunningTaskService) SetHub(hub *realtime.Hub) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.hub = hub
+}
+
+// SetBreakOptionsProvider enables the break selector on the completion card.
+func (s *RunningTaskService) SetBreakOptionsProvider(p BreakOptionsProvider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.breakOptions = p
 }
 
 func (s *RunningTaskService) SetRampService(r RampRecalculator) {
@@ -309,7 +321,17 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 			}
 		}
 
-		if err := s.nt.SendMessageCompletion(task.TaskName, record.TimeDuration, todayDone, targetDuration, remainingTasksList, nextTask, task.TelegramMessageID); err != nil {
+		// The break selector follows a focus block only; after a rest task the card stays as is.
+		var breakOptions []entity.BreakOption
+		if s.breakOptions != nil && (strings.EqualFold(task.Role, "work") || strings.EqualFold(task.Role, "learn")) {
+			if res, err := s.breakOptions.GetBreakOptions(); err != nil {
+				slog.Warn("RunningTaskService: failed to get break options", "task", task.TaskName, "error", err)
+			} else {
+				breakOptions = res.Options
+			}
+		}
+
+		if err := s.nt.SendMessageCompletion(task.TaskName, record.TimeDuration, todayDone, targetDuration, remainingTasksList, nextTask, task.TelegramMessageID, breakOptions); err != nil {
 			slog.Error("RunningTaskService: failed to send telegram completion message", "task", task.TaskName, "error", err)
 		}
 	}

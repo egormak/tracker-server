@@ -21,6 +21,14 @@ type StatisticStorage interface {
 type StatisticService struct {
 	st      StatisticStorage
 	ensurer TodayScheduleEnsurer
+	nowFunc func() time.Time
+}
+
+func (s *StatisticService) now() time.Time {
+	if s.nowFunc != nil {
+		return s.nowFunc()
+	}
+	return time.Now()
 }
 
 func NewStatisticService(st StatisticStorage, ensurer ...TodayScheduleEnsurer) *StatisticService {
@@ -65,8 +73,15 @@ func (s *StatisticService) GetTaskRecordToday() ([]entity.TaskResult, error) {
 
 // GetWeeklyStats returns aggregated task and role metrics for the current calendar week (Monday to Sunday)
 func (s *StatisticService) GetWeeklyStats() (entity.WeeklyStatsResponse, error) {
-	// 1. Get dates for the current week (Monday to Sunday)
-	now := time.Now()
+	return s.weeklyStats(0)
+}
+
+// weeklyStats aggregates the calendar week shifted by weekOffset weeks from the current one
+// (0 = current, -1 = previous). The active schedule is the only one there is, so a past
+// week is measured against today's targets.
+func (s *StatisticService) weeklyStats(weekOffset int) (entity.WeeklyStatsResponse, error) {
+	// 1. Get dates for the week (Monday to Sunday)
+	now := s.now().AddDate(0, 0, 7*weekOffset)
 	weekday := now.Weekday()
 	daysSinceMonday := int(weekday) - 1
 	if daysSinceMonday < 0 {

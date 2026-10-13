@@ -27,6 +27,10 @@ func (m *mockStatService) ShowTaskList() ([]entity.TaskResult, error) {
 	return m.todayTasks, m.todayErr
 }
 
+func (m *mockStatService) GetWeeklyDigest(week string) (entity.WeeklyDigest, error) {
+	return entity.WeeklyDigest{}, nil
+}
+
 func (m *mockStatService) GetWeeklyStats() (entity.WeeklyStatsResponse, error) {
 	return m.weeklyResp, m.weeklyErr
 }

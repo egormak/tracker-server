@@ -20,3 +20,17 @@ type EveningFocusResponse struct {
 type EveningFocusSkipRequest struct {
 	TaskName string `json:"task_name"`
 }
+
+// BreakOption is a non-strict task offered as a 1-tap break after a focus block.
+type BreakOption struct {
+	TaskName   string `json:"task_name"`
+	Role       string `json:"role"`
+	WeeklyDone int    `json:"weekly_done"`
+	IsVariety  bool   `json:"is_variety"` // Least-done task of the week
+}
+
+type BreakOptionsResponse struct {
+	Options         []BreakOption `json:"options"`
+	Durations       []int         `json:"durations"`
+	DefaultDuration int           `json:"default_duration"`
+}

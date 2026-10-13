@@ -139,6 +139,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/stats/weekly/digest:
+    get:
+      tags:
+        - Statistics
+      summary: Get the weekly digest
+      description: >-
+        End-of-week debrief computed on request, nothing is stored: totals by role, the
+        schedule-driven tasks (`work`, `english`) against their plan, the remaining tasks ranked by
+        logged time, and where the week diverged from the schedule. `week=previous` covers the
+        finished week on Monday, before the weekly wipe. A past week is measured against the
+        currently active schedule.
+      operationId: getWeeklyDigest
+      parameters:
+        - name: week
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [current, previous]
+            default: current
+      responses:
+        '200':
+          description: Weekly digest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyDigest"
+        '400':
+          description: Unknown `week` value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/task/params:
     get:
       tags:
@@ -1834,6 +1874,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/mode/break-options:
+    get:
+      tags:
+        - EveningMode
+      summary: Get Break Options
+      description: >-
+        Returns the non-strict tasks (everything except `work` and `english`) for the 1-tap break
+        selector, ordered by least completed time for the week. The first option is the
+        "variety" one. Tasks snoozed in evening mode are not filtered out.
+      operationId: getBreakOptions
+      responses:
+        '200':
+          description: Break options with the preset durations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BreakOptionsResponseWrapper"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/mode/evening-focus/skip:
     post:
       tags:
@@ -2640,6 +2704,96 @@ components:
         - time_duration
         - time_done
 
+    WeeklyDigestRole:
+      type: object
+      properties:
+        role: { type: string, example: "work" }
+        planned: { type: integer, description: Minutes scheduled for the week }
+        done: { type: integer, description: Minutes logged }
+        share_percent: { type: integer, description: Share of all logged time }
+      required: [role, planned, done, share_percent]
+
+    WeeklyDigestTask:
+      type: object
+      properties:
+        name: { type: string, example: "video" }
+        role: { type: string, example: "rest" }
+        planned: { type: integer }
+        done: { type: integer }
+        plan_percent: { type: integer, description: done / planned, 0 when nothing was planned }
+        share_percent: { type: integer, description: Share of the time logged in the task's group (strict or free) }
+      required: [name, role, planned, done, plan_percent, share_percent]
+
+    WeeklyDigestDelta:
+      type: object
+      properties:
+        name: { type: string }
+        role: { type: string }
+        planned: { type: integer }
+        done: { type: integer }
+        delta: { type: integer, description: done - planned }
+      required: [name, role, planned, done, delta]
+
+    WeeklyDigestDay:
+      type: object
+      properties:
+        day: { type: string, example: "monday" }
+        date: { type: string, example: "5 October 2026" }
+        total_done: { type: integer }
+      required: [day, date, total_done]
+
+    WeeklyDigest:
+      type: object
+      properties:
+        week: { type: string, enum: [current, previous] }
+        week_start_date: { type: string }
+        week_end_date: { type: string }
+        total_planned: { type: integer }
+        total_done: { type: integer }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/WeeklyDigestRole" }
+        strict:
+          type: array
+          description: Schedule-driven tasks (`work`, `english`)
+          items: { $ref: "#/components/schemas/WeeklyDigestTask" }
+        free:
+          type: array
+          description: All other tasks, most logged time first
+          items: { $ref: "#/components/schemas/WeeklyDigestTask" }
+        free_done: { type: integer }
+        over_plan:
+          type: array
+          description: Tasks logged above their plan, largest excess first
+          items: { $ref: "#/components/schemas/WeeklyDigestDelta" }
+        untouched:
+          type: array
+          description: Planned tasks with no logged time
+          items: { $ref: "#/components/schemas/WeeklyDigestDelta" }
+        unscheduled:
+          type: array
+          description: Tasks logged without being in the schedule
+          items: { $ref: "#/components/schemas/WeeklyDigestDelta" }
+        days:
+          type: array
+          items: { $ref: "#/components/schemas/WeeklyDigestDay" }
+        busiest_day:
+          $ref: "#/components/schemas/WeeklyDigestDay"
+      required:
+        - week
+        - week_start_date
+        - week_end_date
+        - total_planned
+        - total_done
+        - roles
+        - strict
+        - free
+        - free_done
+        - over_plan
+        - untouched
+        - unscheduled
+        - days
+
     WeeklyStatsResponse:
       type: object
       properties:
@@ -2841,6 +2995,61 @@ components:
           example: "success"
         data:
           $ref: "#/components/schemas/EveningFocusResponse"
+      required:
+        - status
+        - data
+
+    BreakOption:
+      type: object
+      properties:
+        task_name:
+          type: string
+          example: "movies"
+        role:
+          type: string
+          example: "rest"
+        weekly_done:
+          type: integer
+          description: Minutes logged for the task this week
+          example: 10
+        is_variety:
+          type: boolean
+          description: True for the least-done task of the week (the first option)
+      required:
+        - task_name
+        - role
+        - weekly_done
+        - is_variety
+
+    BreakOptionsResponse:
+      type: object
+      properties:
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/BreakOption"
+        durations:
+          type: array
+          description: Preset break durations in minutes
+          items:
+            type: integer
+          example: [15, 20, 30]
+        default_duration:
+          type: integer
+          example: 15
+      required:
+        - options
+        - durations
+        - default_duration
+
+    BreakOptionsResponseWrapper:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          $ref: "#/components/schemas/BreakOptionsResponse"
       required:
         - status
         - data

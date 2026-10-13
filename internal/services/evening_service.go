@@ -138,6 +138,56 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 	}, nil
 }
 
+// GetBreakOptions returns the non-strict tasks for the break selector, least done
+// this week first. Unlike GetEveningFocus it ignores the tasks snoozed for tonight.
+func (s *EveningService) GetBreakOptions() (entity.BreakOptionsResponse, error) {
+	stats, err := s.statSrv.GetWeeklyStats()
+	if err != nil {
+		slog.Error("Failed to get weekly stats for break options", "err", err)
+		return entity.BreakOptionsResponse{}, err
+	}
+
+	targets := make([]entity.WeeklyTaskTarget, 0, len(stats.WeeklyTasks))
+	for _, taskTarget := range stats.WeeklyTasks {
+		lowerName := strings.ToLower(taskTarget.Name)
+		// Strict exclusion of work and english
+		if lowerName == "work" || lowerName == "english" {
+			continue
+		}
+		targets = append(targets, taskTarget)
+	}
+
+	// Same order as the evening candidates, with the name as a final tie-break
+	// so the keyboard does not reshuffle between requests.
+	sort.Slice(targets, func(i, j int) bool {
+		if targets[i].TimeDone != targets[j].TimeDone {
+			return targets[i].TimeDone < targets[j].TimeDone
+		}
+		gapI := targets[i].TimeDuration - targets[i].TimeDone
+		gapJ := targets[j].TimeDuration - targets[j].TimeDone
+		if gapI != gapJ {
+			return gapI > gapJ
+		}
+		return targets[i].Name < targets[j].Name
+	})
+
+	options := make([]entity.BreakOption, len(targets))
+	for i, t := range targets {
+		options[i] = entity.BreakOption{
+			TaskName:   t.Name,
+			Role:       t.Role,
+			WeeklyDone: t.TimeDone,
+			IsVariety:  i == 0,
+		}
+	}
+
+	return entity.BreakOptionsResponse{
+		Options:         options,
+		Durations:       []int{15, 20, 30},
+		DefaultDuration: 15,
+	}, nil
+}
+
 func (s *EveningService) SkipTask(taskName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

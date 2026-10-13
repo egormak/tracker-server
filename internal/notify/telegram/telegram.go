@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"tracker-server/internal/domain/entity"
+
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -32,6 +34,59 @@ func callbackData(prefix, taskName, suffix string) string {
 	}
 	sum := sha1.Sum([]byte(taskName))
 	return prefix + ":#" + hex.EncodeToString(sum[:])[:12] + suffix
+}
+
+// Break selector on the completion card. tracker_bot (handlers/timer.py) rewrites these
+// buttons when another duration is picked; keep prefixes and durations in sync with it.
+const (
+	breakDefaultMinutes = 15
+	breakMaxMoodOptions = 6
+	breakButtonsPerRow  = 3
+)
+
+var breakDurations = []int{15, 20, 30}
+
+// timeNow is replaced in tests.
+var timeNow = time.Now
+
+// breakSelectorRows builds the variety button, the mood carousel and the duration switch.
+// The first option is the least-done task of the week.
+func breakSelectorRows(options []entity.BreakOption) [][]tgbotapi.InlineKeyboardButton {
+	if len(options) == 0 {
+		return nil
+	}
+	suffix := fmt.Sprintf(":%d", breakDefaultMinutes)
+
+	variety := options[0]
+	rows := [][]tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(
+			fmt.Sprintf("🎲 %s · за неделю %dм", variety.TaskName, variety.WeeklyDone),
+			callbackData("t_brk", variety.TaskName, suffix),
+		)),
+	}
+
+	mood := options[1:]
+	if len(mood) > breakMaxMoodOptions {
+		mood = mood[:breakMaxMoodOptions]
+	}
+	for start := 0; start < len(mood); start += breakButtonsPerRow {
+		end := min(start+breakButtonsPerRow, len(mood))
+		var row []tgbotapi.InlineKeyboardButton
+		for _, opt := range mood[start:end] {
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(opt.TaskName, callbackData("t_brk", opt.TaskName, suffix)))
+		}
+		rows = append(rows, row)
+	}
+
+	var durationRow []tgbotapi.InlineKeyboardButton
+	for _, minutes := range breakDurations {
+		label := fmt.Sprintf("%dм", minutes)
+		if minutes == breakDefaultMinutes {
+			label = "✓ " + label
+		}
+		durationRow = append(durationRow, tgbotapi.NewInlineKeyboardButtonData(label, fmt.Sprintf("t_brkdur:%d", minutes)))
+	}
+	return append(rows, durationRow)
 }
 
 func TelegramNew(apiKey string, roomID int64) *Telegram {
@@ -99,7 +154,7 @@ func (t *Telegram) SendMessageStop(taskName string, timeDone int, msgID int, tim
 	return nil
 }
 
-func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int) error {
+func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int, breakOptions []entity.BreakOption) error {
 	if t.Bot == nil {
 		return fmt.Errorf("telegram bot is not initialized")
 	}
@@ -145,6 +200,7 @@ func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDon
 			tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("▶️ Запустить %s", nextTask), callbackData("t_start", nextTask, "")),
 		))
 	}
+	rows = append(rows, breakSelectorRows(breakOptions)...)
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("☕️ Перерыв 10м", "t_rest:10"),
 		tgbotapi.NewInlineKeyboardButtonData("⏳ Продлить +15м", callbackData("t_extend", taskName, ":15")),
@@ -152,6 +208,12 @@ func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDon
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("🌙 Вечерний топ-3", "t_evening_top3"),
 	))
+	// The week is wiped on Monday; Sunday is the day to look back at it. tracker_bot answers "week_digest".
+	if timeNow().Weekday() == time.Sunday {
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📊 Итоги недели", "week_digest"),
+		))
+	}
 
 	msg := tgbotapi.NewMessage(t.RoomID, msgText)
 	msg.ParseMode = "HTML"

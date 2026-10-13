@@ -73,7 +73,7 @@ func (n *mockTaskNotify) SendMessageStop(taskName string, timeDone int, msgID in
 	return nil
 }
 
-func (n *mockTaskNotify) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int) error {
+func (n *mockTaskNotify) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int, breakOptions []entity.BreakOption) error {
 	return nil
 }
 

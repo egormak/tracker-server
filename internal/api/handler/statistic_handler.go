@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"tracker-server/internal/domain/entity"
+	"tracker-server/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -10,6 +12,7 @@ import (
 type StatisticService interface {
 	GetTaskRecordToday() ([]entity.TaskResult, error)
 	GetWeeklyStats() (entity.WeeklyStatsResponse, error)
+	GetWeeklyDigest(week string) (entity.WeeklyDigest, error)
 	ShowTaskList() ([]entity.TaskResult, error)
 }
 
@@ -60,6 +63,26 @@ func (s *StatisticHandler) GetWeeklyStats(c *fiber.Ctx) error {
 	}
 
 	return c.Status(200).JSON(statsData)
+}
+
+// GetWeeklyDigest handles GET /api/v1/stats/weekly/digest?week=current|previous
+func (s *StatisticHandler) GetWeeklyDigest(c *fiber.Ctx) error {
+	slog.Info("Get request GetWeeklyDigest")
+
+	digest, err := s.srv.GetWeeklyDigest(c.Query("week"))
+	if err != nil {
+		status := 500
+		if errors.Is(err, services.ErrInvalidWeek) {
+			status = 400
+		}
+		slog.Error("Failed to get weekly digest", "err", err)
+		return c.Status(status).JSON(&fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(200).JSON(digest)
 }
 
 // TODO: Finish this function

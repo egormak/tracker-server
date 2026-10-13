@@ -182,3 +182,56 @@ func TestEveningServiceLeastDonePriority(t *testing.T) {
 		}
 	}
 }
+
+func TestEveningServiceBreakOptions(t *testing.T) {
+	now := time.Now()
+	daysSinceMonday := int(now.Weekday()) - 1
+	if daysSinceMonday < 0 {
+		daysSinceMonday = 6
+	}
+	mondayDate := now.AddDate(0, 0, -daysSinceMonday).Format("2 January 2006")
+
+	mockStorage := &mockStatStorageWithRecords{
+		records: []entity.TaskRecord{
+			{Name: "movies", Role: "rest", TimeDuration: 57, Date: mondayDate},
+			{Name: "telegram", Role: "rest", TimeDuration: 4, Date: mondayDate},
+			{Name: "video", Role: "rest", TimeDuration: 127, Date: mondayDate},
+			{Name: "work", Role: "work", TimeDuration: 270, Date: mondayDate},
+		},
+	}
+	eveningSrv := NewEveningService(NewStatisticService(mockStorage), &mockRestProvider{})
+
+	// A task snoozed in evening mode is still a valid break choice.
+	if err := eveningSrv.SkipTask("telegram"); err != nil {
+		t.Fatalf("unexpected error skipping telegram: %v", err)
+	}
+
+	res, err := eveningSrv.GetBreakOptions()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var names []string
+	for i, opt := range res.Options {
+		names = append(names, opt.TaskName)
+		if opt.IsVariety != (i == 0) {
+			t.Errorf("only the first option must be the variety one, got %+v at %d", opt, i)
+		}
+	}
+	want := []string{"telegram", "movies", "video"}
+	if len(names) != len(want) {
+		t.Fatalf("expected options %v (work and english excluded), got %v", want, names)
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Errorf("expected options %v ordered by least done, got %v", want, names)
+			break
+		}
+	}
+	if res.Options[0].WeeklyDone != 4 {
+		t.Errorf("expected weekly_done 4 for telegram, got %d", res.Options[0].WeeklyDone)
+	}
+	if res.DefaultDuration != 15 || len(res.Durations) != 3 {
+		t.Errorf("expected durations [15 20 30] with default 15, got %v / %d", res.Durations, res.DefaultDuration)
+	}
+}

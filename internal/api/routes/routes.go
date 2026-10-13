@@ -28,6 +28,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 		runningTaskService.SetHub(hub)
 	}
 	eveningService := services.NewEveningService(statsService, restService)
+	runningTaskService.SetBreakOptionsProvider(eveningService)
 	dayRollService := services.NewDayRollService(scheduleService)
 
 	// Domain Handlers
@@ -82,6 +83,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone)
 	api.Get("/v1/stats/tasks/today", statsHandler.StatCompletionTimeDone)
 	api.Get("/v1/stats/weekly", statsHandler.GetWeeklyStats)
+	api.Get("/v1/stats/weekly/digest", statsHandler.GetWeeklyDigest)
 	api.Get("/v1/tasklist", statsHandler.ShowTaskList) // Legacy endpoint for CLI and web UI
 
 	// Plan Percents
@@ -138,6 +140,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Evening Mode
 	api.Get("/v1/mode/evening-focus", eveningHandler.GetEveningFocus)
 	api.Post("/v1/mode/evening-focus/skip", eveningHandler.SkipTask)
+	api.Get("/v1/mode/break-options", eveningHandler.GetBreakOptions)
 
 	app.Get("/", handler.Welcome)
 

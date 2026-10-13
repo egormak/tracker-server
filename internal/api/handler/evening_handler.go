@@ -89,3 +89,20 @@ func (h *EveningHandler) SkipTask(c *fiber.Ctx) error {
 		"data":   res,
 	})
 }
+
+// GetBreakOptions handles GET /api/v1/mode/break-options
+func (h *EveningHandler) GetBreakOptions(c *fiber.Ctx) error {
+	res, err := h.srv.GetBreakOptions()
+	if err != nil {
+		slog.Error("GetBreakOptions handler error", "err", err)
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(200).JSON(fiber.Map{
+		"status": "success",
+		"data":   res,
+	})
+}
