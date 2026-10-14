@@ -14,4 +14,5 @@ type RunningTask struct {
 	LastHeartbeatAt   time.Time `bson:"last_heartbeat_at,omitempty" json:"last_heartbeat_at,omitempty"`
 	DeadlineAt        time.Time `bson:"deadline_at,omitempty" json:"deadline_at,omitempty"`
 	TelegramMessageID int       `bson:"telegram_message_id,omitempty" json:"telegram_message_id,omitempty"`
+	SourceDevice      string    `bson:"source_device,omitempty" json:"source_device,omitempty"` // client that started the task
 }

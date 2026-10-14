@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"time"
+	"tracker-server/internal/api/middleware"
 	"tracker-server/internal/realtime"
 	"tracker-server/internal/services"
 
@@ -26,6 +27,7 @@ func (h *RunningTaskHandler) Start(c *fiber.Ctx) error {
 		Role           string `json:"role"`
 		TargetDuration int    `json:"target_duration"`
 		SourceDay      string `json:"source_day"`
+		Origin         string `json:"origin"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(400).JSON(fiber.Map{"status": "error", "message": err.Error()})
@@ -33,7 +35,14 @@ func (h *RunningTaskHandler) Start(c *fiber.Ctx) error {
 
 	slog.Info("RunningTaskHandler.Start", "task", body.TaskName, "role", body.Role, "target_duration", body.TargetDuration, "source_day", body.SourceDay)
 
-	task, err := h.service.Start(body.TaskName, body.Role, body.TargetDuration, body.SourceDay)
+	task, err := h.service.StartWith(services.StartOptions{
+		TaskName:       body.TaskName,
+		Role:           body.Role,
+		TargetDuration: body.TargetDuration,
+		SourceDay:      body.SourceDay,
+		Client:         middleware.Client(c),
+		Origin:         body.Origin,
+	})
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}

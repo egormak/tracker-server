@@ -29,6 +29,10 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	}
 	eveningService := services.NewEveningService(statsService, restService)
 	runningTaskService.SetBreakOptionsProvider(eveningService)
+	usageService := services.NewUsageService(mongoconn)
+	runningTaskService.SetUsageService(usageService)
+	statsService.SetDigestStore(mongoconn)
+	taskRecordService.SetBeforeClean(statsService.SnapshotBeforeClean)
 	dayRollService := services.NewDayRollService(scheduleService)
 
 	// Domain Handlers
@@ -47,7 +51,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	// Routes
 	tgAuth := middleware.TelegramAuth(cfg)
-	api := app.Group("/api", tgAuth)
+	api := app.Group("/api", tgAuth, middleware.ClientID())
 
 	// Dashboard
 	api.Get("/v1/dashboard/state", statsHandler.GetDashboardState)
@@ -71,7 +75,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	// Ramp
 	api.Get("/v1/ramp/status", rampHandler.GetStatus)
-	api.Post("/v1/ramp/reset", rampHandler.Reset)
+	api.Post("/v1/ramp/reset", middleware.TrackUsage(usageService, services.UsageRampReset), rampHandler.Reset)
 	api.Post("/v1/ramp/advance", rampHandler.Advance)
 	api.Get("/v1/ramp/config", rampHandler.GetConfig)
 	api.Put("/v1/ramp/config", rampHandler.UpdateConfig)
@@ -131,7 +135,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/timer/run/stop", runningTaskHandler.Stop)
 	api.Post("/v1/timer/run/pause", runningTaskHandler.Pause)
 	api.Post("/v1/timer/run/resume", runningTaskHandler.Resume)
-	api.Post("/v1/timer/run/adjust", runningTaskHandler.Adjust)
+	api.Post("/v1/timer/run/adjust", middleware.TrackUsage(usageService, services.UsageTimerExtend, middleware.PositiveDelta), runningTaskHandler.Adjust)
 	api.Get("/v1/timer/run/status", runningTaskHandler.Status)
 	api.Get("/v1/timer/run/list", runningTaskHandler.List)
 	api.Post("/v1/timer/run/heartbeat", runningTaskHandler.Heartbeat)
@@ -139,7 +143,7 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 
 	// Evening Mode
 	api.Get("/v1/mode/evening-focus", eveningHandler.GetEveningFocus)
-	api.Post("/v1/mode/evening-focus/skip", eveningHandler.SkipTask)
+	api.Post("/v1/mode/evening-focus/skip", middleware.TrackUsage(usageService, services.UsageEveningSkip), eveningHandler.SkipTask)
 	api.Get("/v1/mode/break-options", eveningHandler.GetBreakOptions)
 
 	app.Get("/", handler.Welcome)

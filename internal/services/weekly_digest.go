@@ -1,9 +1,12 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
+	"time"
 	"tracker-server/internal/domain/entity"
 )
 
@@ -35,9 +38,171 @@ func roleRank(role string) int {
 	return 3
 }
 
+// usageEventOrder is the order usage events appear in the digest.
+var usageEventOrder = []string{
+	UsageStartManual,
+	UsageStartBreakVariety,
+	UsageStartBreakMood,
+	UsageStartEvening,
+	UsageStartCombo,
+	UsageEveningSkip,
+	UsageRampReset,
+	UsageTimerExtend,
+}
+
+// digestClients groups the week's records by the client that logged them.
+func digestClients(records []entity.TaskRecord) []entity.WeeklyDigestClient {
+	byClient := make(map[string]*entity.WeeklyDigestClient)
+	total := 0
+	for _, rec := range records {
+		name := rec.SourceDevice
+		if name == "" {
+			name = ClientUnknown
+		}
+		c, ok := byClient[name]
+		if !ok {
+			c = &entity.WeeklyDigestClient{Client: name}
+			byClient[name] = c
+		}
+		c.Records++
+		c.Minutes += rec.TimeDuration
+		total += rec.TimeDuration
+	}
+
+	clients := make([]entity.WeeklyDigestClient, 0, len(byClient))
+	for _, c := range byClient {
+		c.SharePercent = percentOf(c.Minutes, total)
+		clients = append(clients, *c)
+	}
+	sort.Slice(clients, func(i, j int) bool {
+		if clients[i].Minutes != clients[j].Minutes {
+			return clients[i].Minutes > clients[j].Minutes
+		}
+		return clients[i].Client < clients[j].Client
+	})
+	return clients
+}
+
+// digestUsage folds the per-client counters into one entry per event.
+func digestUsage(counters []entity.UsageCounter) []entity.WeeklyDigestUsage {
+	byEvent := make(map[string]*entity.WeeklyDigestUsage)
+	for _, c := range counters {
+		if c.Count <= 0 {
+			continue
+		}
+		u, ok := byEvent[c.Event]
+		if !ok {
+			u = &entity.WeeklyDigestUsage{Event: c.Event, Clients: []entity.WeeklyDigestUsageClient{}}
+			byEvent[c.Event] = u
+		}
+		u.Count += c.Count
+		u.Clients = append(u.Clients, entity.WeeklyDigestUsageClient{Client: c.Client, Count: c.Count})
+	}
+
+	usage := make([]entity.WeeklyDigestUsage, 0, len(byEvent))
+	appendEvent := func(event string) {
+		u, ok := byEvent[event]
+		if !ok {
+			return
+		}
+		sort.Slice(u.Clients, func(i, j int) bool {
+			if u.Clients[i].Count != u.Clients[j].Count {
+				return u.Clients[i].Count > u.Clients[j].Count
+			}
+			return u.Clients[i].Client < u.Clients[j].Client
+		})
+		usage = append(usage, *u)
+		delete(byEvent, event)
+	}
+	for _, event := range usageEventOrder {
+		appendEvent(event)
+	}
+	// Events this build does not know (counted by a newer one) go last, by name.
+	rest := make([]string, 0, len(byEvent))
+	for event := range byEvent {
+		rest = append(rest, event)
+	}
+	sort.Strings(rest)
+	for _, event := range rest {
+		appendEvent(event)
+	}
+	return usage
+}
+
+// digestIsEmpty reports a week with no logged time and no counted choices.
+func digestIsEmpty(d entity.WeeklyDigest) bool {
+	return d.TotalDone == 0 && len(d.Usage) == 0
+}
+
 // GetWeeklyDigest builds the end-of-week debrief. "previous" exists because the weekly
-// wipe happens on Monday, when the finished week is no longer the current one.
+// wipe happens on Monday, when the finished week is no longer the current one. Once that
+// week's records are wiped, "previous" answers from the snapshot taken before the wipe.
 func (s *StatisticService) GetWeeklyDigest(week string) (entity.WeeklyDigest, error) {
+	digest, err := s.liveWeeklyDigest(week)
+	if err != nil {
+		return entity.WeeklyDigest{}, err
+	}
+	if digest.Week != WeekPrevious || !digestIsEmpty(digest) || s.digestStore == nil {
+		return digest, nil
+	}
+
+	snapshot, found, err := s.digestStore.GetDigestSnapshot()
+	if err != nil {
+		slog.Warn("GetWeeklyDigest: failed to read digest snapshot", "err", err)
+		return digest, nil
+	}
+	if !found || snapshot.WeekStartDate != digest.WeekStartDate {
+		return digest, nil
+	}
+	var stored entity.WeeklyDigest
+	if err := json.Unmarshal([]byte(snapshot.Payload), &stored); err != nil {
+		slog.Warn("GetWeeklyDigest: digest snapshot is not readable", "err", err)
+		return digest, nil
+	}
+	stored.Week = WeekPrevious
+	stored.Source = entity.DigestSourceSnapshot
+	stored.SnapshotTakenAt = snapshot.TakenAt.UTC().Format(time.RFC3339)
+	return stored, nil
+}
+
+// SnapshotBeforeClean stores the digest of the week the wipe is about to erase: the
+// previous week when it still has records (the usual Monday wipe), otherwise the current
+// one. An empty digest is not stored, so a repeated wipe keeps the earlier snapshot.
+func (s *StatisticService) SnapshotBeforeClean() {
+	if s.digestStore == nil {
+		return
+	}
+	digest, err := s.liveWeeklyDigest(WeekPrevious)
+	if err == nil && digestIsEmpty(digest) {
+		digest, err = s.liveWeeklyDigest(WeekCurrent)
+	}
+	if err != nil {
+		slog.Warn("SnapshotBeforeClean: failed to build digest", "err", err)
+		return
+	}
+	if digestIsEmpty(digest) {
+		slog.Info("SnapshotBeforeClean: nothing logged, keeping the existing snapshot")
+		return
+	}
+	payload, err := json.Marshal(digest)
+	if err != nil {
+		slog.Warn("SnapshotBeforeClean: failed to encode digest", "err", err)
+		return
+	}
+	snapshot := entity.DigestSnapshot{
+		WeekStartDate: digest.WeekStartDate,
+		TakenAt:       s.now().UTC(),
+		Payload:       string(payload),
+	}
+	if err := s.digestStore.SaveDigestSnapshot(snapshot); err != nil {
+		slog.Warn("SnapshotBeforeClean: failed to save digest snapshot", "err", err)
+		return
+	}
+	slog.Info("SnapshotBeforeClean: digest snapshot saved", "week_start", digest.WeekStartDate)
+}
+
+// liveWeeklyDigest computes the digest from the records and counters currently stored.
+func (s *StatisticService) liveWeeklyDigest(week string) (entity.WeeklyDigest, error) {
 	offset := 0
 	switch week {
 	case "", WeekCurrent:
@@ -55,6 +220,9 @@ func (s *StatisticService) GetWeeklyDigest(week string) (entity.WeeklyDigest, er
 
 	digest := entity.WeeklyDigest{
 		Week:          week,
+		Source:        entity.DigestSourceLive,
+		Clients:       []entity.WeeklyDigestClient{},
+		Usage:         []entity.WeeklyDigestUsage{},
 		WeekStartDate: stats.WeekStartDate,
 		WeekEndDate:   stats.WeekEndDate,
 		Roles:         []entity.WeeklyDigestRole{},
@@ -161,6 +329,25 @@ func (s *StatisticService) GetWeeklyDigest(week string) (entity.WeeklyDigest, er
 		if d.TotalDone > 0 && (digest.BusiestDay == nil || d.TotalDone > digest.BusiestDay.TotalDone) {
 			busiest := d
 			digest.BusiestDay = &busiest
+		}
+	}
+
+	dates := make([]string, 0, len(stats.Days))
+	for _, day := range stats.Days {
+		dates = append(dates, day.Date)
+	}
+	records, err := s.st.GetRecordsForDates(dates)
+	if err != nil {
+		return entity.WeeklyDigest{}, fmt.Errorf("failed to get records for week: %w", err)
+	}
+	digest.Clients = digestClients(records)
+
+	if s.digestStore != nil {
+		counters, err := s.digestStore.GetUsageCounters(stats.WeekStartDate)
+		if err != nil {
+			slog.Warn("GetWeeklyDigest: failed to read usage counters", "err", err)
+		} else {
+			digest.Usage = digestUsage(counters)
 		}
 	}
 

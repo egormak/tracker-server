@@ -66,6 +66,11 @@ func (s *Storage) CleanRecords() {
 		slog.Error("clean-records: failed to reset rest count in task_info", "error", err)
 	}
 
+	// Usage counters live and die with the week's records
+	if _, err := database.Collection(usageCountersCollection).DeleteMany(s.Context, bson.M{}); err != nil {
+		slog.Error("clean-records: failed to delete usage counters", "error", err)
+	}
+
 	// In role_info: reset via DeleteMany
 	if _, err := collRoleInfo.DeleteMany(s.Context, bson.M{}); err != nil {
 		slog.Error("clean-records: failed to delete role_info", "error", err)

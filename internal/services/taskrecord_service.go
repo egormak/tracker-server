@@ -37,6 +37,7 @@ type RampRecalculator interface {
 type TaskRecordService struct {
 	st          TaskRecordStorage
 	rampService RampRecalculator
+	beforeClean func()
 }
 
 func NewTaskRecordService(st TaskRecordStorage, rampRecalculator ...RampRecalculator) *TaskRecordService {
@@ -208,6 +209,7 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 									Date:         dateForDay,
 									SourceDay:    checkDay,
 									CreatedAt:    time.Now().UTC(),
+									SourceDevice: taskRecordRequest.SourceDevice,
 								}
 								if err := s.st.AddTaskRecord(pastRecord); err != nil {
 									slog.Error("failed to add backfill record", "err", err)
@@ -274,6 +276,7 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 						Date:         tomorrowDate,
 						SourceDay:    tomorrowDay,
 						CreatedAt:    time.Now().UTC(),
+						SourceDevice: taskRecordRequest.SourceDevice,
 					}
 
 					if err := s.st.AddTaskRecord(overtimeRecord); err == nil {
@@ -297,6 +300,7 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 		Date:         recordDate,
 		SourceDay:    taskRecordRequest.SourceDay,
 		CreatedAt:    time.Now().UTC(),
+		SourceDevice: taskRecordRequest.SourceDevice,
 	}
 
 	slog.Info("Creating task record",
@@ -369,7 +373,15 @@ func (s *TaskRecordService) GetRecords() ([]entity.TaskRecord, error) {
 	return s.st.GetRecords()
 }
 
+// SetBeforeClean registers a hook that runs right before the records are wiped.
+func (s *TaskRecordService) SetBeforeClean(hook func()) {
+	s.beforeClean = hook
+}
+
 func (s *TaskRecordService) CleanRecords() {
+	if s.beforeClean != nil {
+		s.beforeClean()
+	}
 	s.st.CleanRecords()
 }
 

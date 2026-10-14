@@ -4,6 +4,11 @@ info:
   description: |
     API for time tracking with three main roles: Work, Learn, and Rest.
     This service helps track time spent on various tasks and manage schedules.
+
+    Every client should send the `X-Tracker-Client` request header with its own name: one of
+    `cli`, `web`, `miniapp`, `bot`, `app`, `mcp`. The server stores it as `source_device` on the
+    task records the request creates and uses it in the weekly usage counters. The header is
+    optional; any other value is ignored and the request is counted as `unknown`.
   version: 1.0.0
 servers:
   - url: http://localhost:8080
@@ -145,11 +150,14 @@ paths:
         - Statistics
       summary: Get the weekly digest
       description: >-
-        End-of-week debrief computed on request, nothing is stored: totals by role, the
-        schedule-driven tasks (`work`, `english`) against their plan, the remaining tasks ranked by
-        logged time, and where the week diverged from the schedule. `week=previous` covers the
-        finished week on Monday, before the weekly wipe. A past week is measured against the
-        currently active schedule.
+        End-of-week debrief computed on request: totals by role, the schedule-driven tasks
+        (`work`, `english`) against their plan, the remaining tasks ranked by logged time, where
+        the week diverged from the schedule, the logged time by client and the week's usage
+        counters. `week=previous` covers the finished week on Monday, before the weekly wipe.
+        `POST /api/v1/records/clean` stores one snapshot of the digest it is about to erase
+        (replacing the earlier one); once the previous week has no records left, `week=previous`
+        answers from that snapshot with `source: snapshot`. A live past week is measured against
+        the currently active schedule, a snapshot against the schedule at the time of the wipe.
       operationId: getWeeklyDigest
       parameters:
         - name: week
@@ -1338,7 +1346,12 @@ paths:
     post:
       tags:
         - TaskRecord
-      summary: Clean all records (dev)
+      summary: Clean all records (weekly wipe)
+      description: >-
+        Erases all task records, running tasks, role totals and usage counters, and resets the
+        rest balance. Before erasing, stores one weekly digest snapshot (see
+        `GET /api/v1/stats/weekly/digest`): the previous week when it still has records, otherwise
+        the current one. An empty digest is not stored, so a repeated wipe keeps the snapshot.
       operationId: cleanRecords
       responses:
         '200':
@@ -2710,7 +2723,9 @@ components:
         role: { type: string, example: "work" }
         planned: { type: integer, description: Minutes scheduled for the week }
         done: { type: integer, description: Minutes logged }
-        share_percent: { type: integer, description: Share of all logged time }
+        share_percent:
+          type: integer
+          description: Share of all logged time
       required: [role, planned, done, share_percent]
 
     WeeklyDigestTask:
@@ -2746,6 +2761,14 @@ components:
       type: object
       properties:
         week: { type: string, enum: [current, previous] }
+        source:
+          type: string
+          enum: [live, snapshot]
+          description: "`snapshot` when the week's records are wiped and the digest is the copy taken before the wipe"
+        snapshot_taken_at:
+          type: string
+          format: date-time
+          description: "Present only with `source: snapshot`"
         week_start_date: { type: string }
         week_end_date: { type: string }
         total_planned: { type: integer }
@@ -2779,8 +2802,19 @@ components:
           items: { $ref: "#/components/schemas/WeeklyDigestDay" }
         busiest_day:
           $ref: "#/components/schemas/WeeklyDigestDay"
+        clients:
+          type: array
+          description: Logged time by client (the records' `source_device`), most time first
+          items: { $ref: "#/components/schemas/WeeklyDigestClient" }
+        usage:
+          type: array
+          description: Usage counters of the week in a fixed event order; events never counted are omitted
+          items: { $ref: "#/components/schemas/WeeklyDigestUsage" }
       required:
         - week
+        - source
+        - clients
+        - usage
         - week_start_date
         - week_end_date
         - total_planned
@@ -2793,6 +2827,37 @@ components:
         - untouched
         - unscheduled
         - days
+
+    WeeklyDigestClient:
+      type: object
+      properties:
+        client:
+          type: string
+          description: "`cli`, `web`, `miniapp`, `bot`, `app`, `mcp`, or `unknown` for records with no client name"
+        records: { type: integer }
+        minutes: { type: integer }
+        share_percent: { type: integer, description: Share of all logged time }
+      required: [client, records, minutes, share_percent]
+
+    WeeklyDigestUsage:
+      type: object
+      properties:
+        event:
+          type: string
+          description: >-
+            `start_manual`, `start_break_variety`, `start_break_mood`, `start_evening`,
+            `start_combo` (every newly started running task, by the way it was chosen),
+            `evening_skip`, `ramp_reset`, `timer_extend`
+        count: { type: integer }
+        clients:
+          type: array
+          items:
+            type: object
+            properties:
+              client: { type: string }
+              count: { type: integer }
+            required: [client, count]
+      required: [event, count, clients]
 
     WeeklyStatsResponse:
       type: object
@@ -2831,6 +2896,13 @@ components:
           type: integer
         source_day:
           type: string
+        origin:
+          type: string
+          enum: [break, evening, combo]
+          description: >-
+            How the task was chosen, for the weekly usage counters: `break` (break selector),
+            `evening` (evening focus), `combo` (combo chain step). Omitted or anything else counts
+            as a manual start. Counted only when a new task starts, not on resume.
       required:
         - task_name
 
@@ -2890,6 +2962,9 @@ components:
           format: date-time
         telegram_message_id:
           type: integer
+        source_device:
+          type: string
+          description: Client that started the task (`X-Tracker-Client`); copied to the task record on stop
       required:
         - task_name
         - role
@@ -3091,7 +3166,8 @@ components:
           example: "2026-09-20T22:00:00Z"
         source_device:
           type: string
-          example: "laptop"
+          description: Client that created the record (`X-Tracker-Client`); absent when it did not identify itself
+          example: "cli"
       required:
         - name
         - role

@@ -18,10 +18,24 @@ type StatisticStorage interface {
 	GetRecordsForDates(dates []string) ([]entity.TaskRecord, error)
 }
 
+// DigestStore holds what the weekly digest keeps beyond the task records: the usage
+// counters and the single snapshot taken before the weekly wipe.
+type DigestStore interface {
+	GetUsageCounters(week string) ([]entity.UsageCounter, error)
+	SaveDigestSnapshot(snapshot entity.DigestSnapshot) error
+	GetDigestSnapshot() (entity.DigestSnapshot, bool, error)
+}
+
 type StatisticService struct {
-	st      StatisticStorage
-	ensurer TodayScheduleEnsurer
-	nowFunc func() time.Time
+	st          StatisticStorage
+	ensurer     TodayScheduleEnsurer
+	digestStore DigestStore
+	nowFunc     func() time.Time
+}
+
+// SetDigestStore enables usage counters and the pre-wipe snapshot in the weekly digest.
+func (s *StatisticService) SetDigestStore(store DigestStore) {
+	s.digestStore = store
 }
 
 func (s *StatisticService) now() time.Time {

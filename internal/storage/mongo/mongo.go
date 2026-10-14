@@ -87,6 +87,15 @@ func (s *Storage) EnsureIndexes(ctx context.Context) error {
 		return fmt.Errorf("failed to create indexes on %s: %w", runningTaskCollection, err)
 	}
 
+	// usage_counters collection: one document per (week, event, client)
+	_, err = db.Collection(usageCountersCollection).Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "week", Value: 1}, {Key: "event", Value: 1}, {Key: "client", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create indexes on %s: %w", usageCountersCollection, err)
+	}
+
 	// weekly_schedules collection: index on is_active: 1
 	schedColl := db.Collection(weeklySchedulesCollection)
 	_, err = schedColl.Indexes().CreateMany(ctx, []mongo.IndexModel{

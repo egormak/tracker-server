@@ -40,7 +40,20 @@ type RunningTaskService struct {
 	hub          *realtime.Hub
 	rampService  RampRecalculator
 	breakOptions BreakOptionsProvider
+	usage        *UsageService
 	mu           sync.Mutex
+}
+
+// StartOptions describes a start request. Client and Origin are optional: Client is the
+// calling client's name, Origin says how the task was chosen (OriginBreak, OriginEvening,
+// OriginCombo; anything else counts as a manual start).
+type StartOptions struct {
+	TaskName       string
+	Role           string
+	TargetDuration int
+	SourceDay      string
+	Client         string
+	Origin         string
 }
 
 func NewRunningTaskService(st RunningTaskStorage, nt notify.Notify) *RunningTaskService {
@@ -60,6 +73,13 @@ func (s *RunningTaskService) SetBreakOptionsProvider(p BreakOptionsProvider) {
 	s.breakOptions = p
 }
 
+// SetUsageService enables weekly usage counters for task starts.
+func (s *RunningTaskService) SetUsageService(u *UsageService) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.usage = u
+}
+
 func (s *RunningTaskService) SetRampService(r RampRecalculator) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -67,6 +87,37 @@ func (s *RunningTaskService) SetRampService(r RampRecalculator) {
 }
 
 func (s *RunningTaskService) Start(taskName string, role string, targetDuration int, sourceDay string) (entity.RunningTask, error) {
+	return s.StartWith(StartOptions{TaskName: taskName, Role: role, TargetDuration: targetDuration, SourceDay: sourceDay})
+}
+
+// startEvent maps a start origin to its usage event. A break start is "variety" when the
+// task is the one the break selector currently puts first, otherwise "mood".
+func (s *RunningTaskService) startEvent(origin, taskName string) string {
+	switch origin {
+	case OriginEvening:
+		return UsageStartEvening
+	case OriginCombo:
+		return UsageStartCombo
+	case OriginBreak:
+		if s.breakOptions != nil {
+			if resp, err := s.breakOptions.GetBreakOptions(); err == nil {
+				for _, opt := range resp.Options {
+					if opt.IsVariety && strings.EqualFold(opt.TaskName, taskName) {
+						return UsageStartBreakVariety
+					}
+				}
+			}
+		}
+		return UsageStartBreakMood
+	}
+	return UsageStartManual
+}
+
+// StartWith starts a task. The client and the origin are recorded only for a newly
+// started task, not when it is already running or resumed from a pause.
+func (s *RunningTaskService) StartWith(opts StartOptions) (entity.RunningTask, error) {
+	taskName, role, targetDuration, sourceDay := opts.TaskName, opts.Role, opts.TargetDuration, opts.SourceDay
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -129,7 +180,11 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 		IsRunning:       true,
 		TargetDuration:  targetDuration,
 		SourceDay:       sourceDay,
+		SourceDevice:    opts.Client,
 	}
+
+	// Classified before the task exists: the break selector ranks by logged time.
+	usageEvent := s.startEvent(opts.Origin, taskName)
 
 	if targetDuration > 0 {
 		task.DeadlineAt = now.Add(time.Duration(targetDuration) * time.Minute)
@@ -144,6 +199,7 @@ func (s *RunningTaskService) Start(taskName string, role string, targetDuration 
 	if err := s.st.UpsertRunningTask(task); err != nil {
 		return entity.RunningTask{}, err
 	}
+	s.usage.Track(usageEvent, opts.Client)
 
 	s.broadcastEvent(realtime.Event{
 		Type:     realtime.EventTaskStarted,
@@ -212,6 +268,7 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 						Date:         tomorrowDate,
 						SourceDay:    tomorrowDay,
 						CreatedAt:    time.Now().UTC(),
+						SourceDevice: task.SourceDevice,
 					}
 
 					if err := s.st.AddTaskRecord(overtimeRecord); err == nil {
@@ -236,6 +293,7 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 		Date:         recordDate,
 		SourceDay:    task.SourceDay,
 		CreatedAt:    time.Now().UTC(),
+		SourceDevice: task.SourceDevice,
 	}
 
 	if duration > 0 {

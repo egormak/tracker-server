@@ -18,6 +18,7 @@ type TaskRecordRequest struct {
 	TimeDone        int    `json:"time_done"`
 	SourceDay       string `json:"source_day,omitempty"`        // Optional: "monday", "tuesday", etc. If empty, uses today
 	ManageByService bool   `json:"manage_by_service,omitempty"` // If true, distributes time to past unfilled schedules
+	SourceDevice    string `json:"-"`                           // Calling client, set by the handler from the X-Tracker-Client header
 }
 
 type TaskResult struct {

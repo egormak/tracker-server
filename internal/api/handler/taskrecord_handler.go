@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"tracker-server/internal/api/middleware"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/services"
 
@@ -51,6 +52,8 @@ func (t *TaskRecordHandler) AddRecord(c *fiber.Ctx) error {
 			"message": errMsg.Error(),
 		})
 	}
+
+	body.SourceDevice = middleware.Client(c)
 
 	// Log parsed request details
 	slog.Info("Parsed request body",

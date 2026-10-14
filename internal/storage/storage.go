@@ -78,4 +78,10 @@ type Storage interface {
 	ResetRampStep(ctx context.Context, date string, baselineMinutes int) error
 	UpdateRampBaseline(ctx context.Context, baselineMinutes int) error
 	UpdateRampStep(ctx context.Context, step int, date string) error
+
+	// Weekly usage counters and the digest snapshot
+	IncUsageCounter(week, event, client string) error
+	GetUsageCounters(week string) ([]entity.UsageCounter, error)
+	SaveDigestSnapshot(snapshot entity.DigestSnapshot) error
+	GetDigestSnapshot() (entity.DigestSnapshot, bool, error)
 }
