@@ -20,10 +20,6 @@ type RunningTaskProvider interface {
 	GetStatus(taskName string) (entity.RunningTask, error)
 }
 
-type RestProvider interface {
-	GetRest() (int, error)
-}
-
 type EveningProvider interface {
 	GetEveningFocus(category string, timeOverride int) (entity.EveningFocusResponse, error)
 }
@@ -31,20 +27,17 @@ type EveningProvider interface {
 type StatisticHandler struct {
 	srv         StatisticService
 	runningTask RunningTaskProvider
-	rest        RestProvider
 	evening     EveningProvider
 }
 
 func NewStatisticHandler(
 	srv StatisticService,
 	runningTask RunningTaskProvider,
-	rest RestProvider,
 	evening EveningProvider,
 ) *StatisticHandler {
 	return &StatisticHandler{
 		srv:         srv,
 		runningTask: runningTask,
-		rest:        rest,
 		evening:     evening,
 	}
 }
@@ -119,7 +112,7 @@ func (s *StatisticHandler) ShowTaskList(c *fiber.Ctx) error {
 	return c.Status(200).JSON(taskList)
 }
 
-// GetDashboardState aggregates running task, today's tasks, rest pool, and evening focus in a single response
+// GetDashboardState aggregates running task, today's tasks and evening focus in a single response
 func (s *StatisticHandler) GetDashboardState(c *fiber.Ctx) error {
 	slog.Info("Get request GetDashboardState")
 
@@ -160,17 +153,7 @@ func (s *StatisticHandler) GetDashboardState(c *fiber.Ctx) error {
 		resp.CompletionPct = int(float64(totalDone) / float64(totalPlanned) * 100)
 	}
 
-	// 3. Rest Pool balance (raw units: units = minutes * 100)
-	if s.rest != nil {
-		restUnits, err := s.rest.GetRest()
-		if err != nil {
-			slog.Error("Failed to get rest units for dashboard state", "err", err)
-		} else {
-			resp.RestPool = restUnits
-		}
-	}
-
-	// 4. Evening Focus (optional, top 3 candidates)
+	// 3. Evening Focus (optional, top 3 candidates)
 	if s.evening != nil {
 		focus, err := s.evening.GetEveningFocus("", 0)
 		if err != nil {

@@ -15,6 +15,7 @@ type MockRunningTaskStorage struct {
 	dateDurations        map[string]int
 	activeSchedule       entity.WeeklySchedule
 	taskParams           map[string]entity.TaskParams
+	strictTasks          map[string]bool
 }
 
 func NewMockRunningTaskStorage() *MockRunningTaskStorage {
@@ -78,10 +79,6 @@ func (m *MockRunningTaskStorage) AddRoleMinutes(task entity.TaskRecord) error {
 	return nil
 }
 
-func (m *MockRunningTaskStorage) AddRest(restTime int) error {
-	return nil
-}
-
 func (m *MockRunningTaskStorage) TimeListDelDB(timeDuretion int) error {
 	return nil
 }
@@ -118,7 +115,7 @@ func (m *MockRunningTaskStorage) GetTaskParams(taskName string) (entity.TaskPara
 }
 
 func (m *MockRunningTaskStorage) IsTaskStrict(taskName string) (bool, error) {
-	return false, nil
+	return m.strictTasks[taskName], nil
 }
 
 func TestTimerWatchdog_TargetDurationAutoStop(t *testing.T) {

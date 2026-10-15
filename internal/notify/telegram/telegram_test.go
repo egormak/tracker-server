@@ -119,7 +119,7 @@ func TestSendMessageCompletion_WithRemainingTasks(t *testing.T) {
 	})
 	defer server.Close()
 
-	err := tg.SendMessageCompletion("coding", 25, 25, 50, []string{"english", "math"}, "english", 456, nil)
+	err := tg.SendMessageCompletion("coding", 25, 25, 50, []string{"english", "math"}, "english", 456, nil, nil)
 	if err != nil {
 		t.Fatalf("SendMessageCompletion failed: %v", err)
 	}
@@ -147,8 +147,8 @@ func TestSendMessageCompletion_WithRemainingTasks(t *testing.T) {
 	if !strings.Contains(capturedSendBody, "▶️ Запустить english") || !strings.Contains(capturedSendBody, "t_start:english") {
 		t.Errorf("expected start next task button, got: %s", capturedSendBody)
 	}
-	if !strings.Contains(capturedSendBody, "☕️ Перерыв 10м") || !strings.Contains(capturedSendBody, "t_rest:10") {
-		t.Errorf("expected rest button, got: %s", capturedSendBody)
+	if strings.Contains(capturedSendBody, "t_rest") {
+		t.Errorf("rest balance is gone, expected no rest button, got: %s", capturedSendBody)
 	}
 	if !strings.Contains(capturedSendBody, "⏳ Продлить +15м") || !strings.Contains(capturedSendBody, "t_extend:coding:15") {
 		t.Errorf("expected extend button, got: %s", capturedSendBody)
@@ -188,7 +188,7 @@ func TestSendMessageCompletion_AllCompleted(t *testing.T) {
 	defer server.Close()
 
 	// msgID is 0 (should not call deleteMessage), percent 100%, no remaining tasks, nextTask is empty
-	err := tg.SendMessageCompletion("reading", 30, 30, 30, nil, "", 0, nil)
+	err := tg.SendMessageCompletion("reading", 30, 30, 30, nil, "", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("SendMessageCompletion failed: %v", err)
 	}
@@ -216,10 +216,7 @@ func TestSendMessageCompletion_AllCompleted(t *testing.T) {
 		t.Errorf("should not contain t_start button when nextTask is empty, got: %s", capturedSendBody)
 	}
 
-	// Should still contain rest, extend, evening buttons
-	if !strings.Contains(capturedSendBody, "☕️ Перерыв 10м") {
-		t.Errorf("expected rest button, got: %s", capturedSendBody)
-	}
+	// Should still contain extend and evening buttons
 	if !strings.Contains(capturedSendBody, "t_extend:reading:15") {
 		t.Errorf("expected extend button, got: %s", capturedSendBody)
 	}
@@ -243,7 +240,7 @@ func TestSendMessageCompletion_ZeroTargetDuration(t *testing.T) {
 	defer server.Close()
 
 	// targetDuration == 0 should not panic (division by zero) and shows no percent
-	err := tg.SendMessageCompletion("misc", 15, 15, 0, nil, "", 0, nil)
+	err := tg.SendMessageCompletion("misc", 15, 15, 0, nil, "", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("SendMessageCompletion failed: %v", err)
 	}
@@ -266,7 +263,7 @@ func TestTelegram_NilBot(t *testing.T) {
 	if err := tg.SendMessageStop("test", 10, 1, "now"); err == nil {
 		t.Errorf("expected error for SendMessageStop with nil Bot")
 	}
-	if err := tg.SendMessageCompletion("test", 10, 10, 10, nil, "", 1, nil); err == nil {
+	if err := tg.SendMessageCompletion("test", 10, 10, 10, nil, "", 1, nil, nil); err == nil {
 		t.Errorf("expected error for SendMessageCompletion with nil Bot")
 	}
 	if err := tg.SendCustomMessage("test"); err == nil {
@@ -303,7 +300,7 @@ func TestSendMessageCompletion_EscapesHTML(t *testing.T) {
 	})
 	defer server.Close()
 
-	if err := tg.SendMessageCompletion("R&D", 10, 10, 20, []string{"a<b"}, "a<b", 0, nil); err != nil {
+	if err := tg.SendMessageCompletion("R&D", 10, 10, 20, []string{"a<b"}, "a<b", 0, nil, nil); err != nil {
 		t.Fatalf("SendMessageCompletion failed: %v", err)
 	}
 	if !strings.Contains(capturedSendBody, "<b>R&amp;D</b>") {
@@ -339,14 +336,14 @@ func TestSendMessageCompletion_BreakSelector(t *testing.T) {
 		{TaskName: "video", Role: "rest", WeeklyDone: 40},
 	}
 	body := captureCompletionBody(t, func(tg *Telegram) error {
-		return tg.SendMessageCompletion("work", 25, 25, 50, nil, "", 0, options)
+		return tg.SendMessageCompletion("work", 25, 25, 50, nil, "", 0, options, nil)
 	})
 
 	for _, want := range []string{
 		"🎲 movies · за неделю 0м", "t_brk:movies:15",
 		"t_brk:games:15", "t_brk:video:15",
 		"✓ 15м", "t_brkdur:15", "t_brkdur:20", "t_brkdur:30",
-		"t_rest:10", "t_extend:work:15", "t_evening_top3",
+		"t_extend:work:15", "t_evening_top3",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("expected keyboard to contain %q, got: %s", want, body)
@@ -359,12 +356,12 @@ func TestSendMessageCompletion_BreakSelector(t *testing.T) {
 
 func TestSendMessageCompletion_NoBreakSelectorWithoutOptions(t *testing.T) {
 	body := captureCompletionBody(t, func(tg *Telegram) error {
-		return tg.SendMessageCompletion("video", 15, 15, 15, nil, "", 0, nil)
+		return tg.SendMessageCompletion("video", 15, 15, 15, nil, "", 0, nil, nil)
 	})
 	if strings.Contains(body, "t_brk") {
 		t.Errorf("expected no break selector without options, got: %s", body)
 	}
-	if !strings.Contains(body, "t_rest:10") {
+	if !strings.Contains(body, "t_extend:video:15") {
 		t.Errorf("expected the regular rows to stay, got: %s", body)
 	}
 }
@@ -401,7 +398,7 @@ func TestSendMessageCompletion_WeeklyDigestButtonOnSundayOnly(t *testing.T) {
 	defer func() { timeNow = time.Now }()
 
 	send := func(tg *Telegram) error {
-		return tg.SendMessageCompletion("work", 25, 25, 50, nil, "", 0, nil)
+		return tg.SendMessageCompletion("work", 25, 25, 50, nil, "", 0, nil, nil)
 	}
 
 	timeNow = func() time.Time { return time.Date(2026, 10, 11, 20, 0, 0, 0, time.UTC) } // Sunday
@@ -412,5 +409,16 @@ func TestSendMessageCompletion_WeeklyDigestButtonOnSundayOnly(t *testing.T) {
 	timeNow = func() time.Time { return time.Date(2026, 10, 12, 20, 0, 0, 0, time.UTC) } // Monday
 	if body := captureCompletionBody(t, send); strings.Contains(body, "week_digest") {
 		t.Errorf("expected no weekly digest button on Monday, got: %s", body)
+	}
+}
+
+func TestSendMessageCompletion_Notes(t *testing.T) {
+	body := captureCompletionBody(t, func(tg *Telegram) error {
+		return tg.SendMessageCompletion("home_task", 20, 40, 40, nil, "", 0, nil, []string{"↪️ Ср +15 мин", "🎉 День закрыт ✅ — Среда"})
+	})
+	for _, want := range []string{"📊 Сегодня: 40 / 40 мин (100% выполнено ✅)\n↪️ Ср +15 мин\n🎉 День закрыт ✅ — Среда"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected card to contain %q, got: %s", want, body)
+		}
 	}
 }

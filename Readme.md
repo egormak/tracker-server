@@ -28,7 +28,7 @@ docker run -d \
 - `internal/api/middleware/` – Telegram authentication middleware
 - `internal/realtime/` – WebSocket hub for real-time timer event broadcasting
 - `internal/domain/entity/` – Domain model/entity definitions
-- `internal/services/` – Business logic layer (tasks, taskrecords, plan, schedule, running_task, ramp, evening, day_roll, timer_watchdog)
+- `internal/services/` – Business logic layer (tasks, taskrecords, plan, schedule, running_task, debt, ramp, evening, day_roll, timer_watchdog)
 - `internal/storage/mongo/` – MongoDB persistence adapters
 - `internal/notify/telegram/` – Telegram notification adapter with inline action buttons
 - `config/config.go` – Configuration loader
@@ -88,6 +88,7 @@ See `openapi.yml` for the full specification.
 - **Running Task:** `POST /api/v1/timer/run/start`, `POST /api/v1/timer/run/stop`, `POST /api/v1/timer/run/heartbeat`, `GET /api/v1/timer/ws`
 - **Ramp Warm-up:** `GET /api/v1/ramp/status`, `POST /api/v1/ramp/advance`
 - **Evening Focus:** `GET /api/v1/mode/evening-focus`
+- **Debt:** `GET /api/v1/debt`
 - **Schedule:** `GET /api/v1/schedule/active/today`, `POST /api/v1/schedule/apply`
 
 ## Architecture Graph
@@ -101,7 +102,7 @@ graph TD
         H_Ramp[Ramp Handler]
         H_Eve[Evening Handler]
         H_Manage[Manage Handler]
-        H_Rest[Rest Handler]
+        H_Debt[Debt Handler]
         H_Sched[Schedule Handler]
         H_Task[Task Handler]
         H_Rec[TaskRecord Handler]
@@ -112,7 +113,7 @@ graph TD
     Router -->|/ramp/*| H_Ramp
     Router -->|/mode/evening-focus*| H_Eve
     Router -->|/manage/*| H_Manage
-    Router -->|/rest/*| H_Rest
+    Router -->|/debt| H_Debt
     Router -->|/schedule/*| H_Sched
     Router -->|/task/*| H_Task
     Router -->|/taskrecord| H_Rec
@@ -122,7 +123,7 @@ graph TD
         S_Ramp[Ramp Service]
         S_Eve[Evening Service]
         S_Manage[Manage Service]
-        S_Rest[Rest Service]
+        S_Debt[Debt Service]
         S_Sched[Schedule Service]
         S_Stat[Statistic Service]
         S_Task[Task Service]
@@ -136,7 +137,7 @@ graph TD
     H_Ramp --> S_Ramp
     H_Eve --> S_Eve
     H_Manage --> S_Manage
-    H_Rest --> S_Rest
+    H_Debt --> S_Debt
     H_Sched --> S_Sched
     H_Task --> S_Task
     H_Rec --> S_Rec
@@ -145,6 +146,9 @@ graph TD
     W_DayRoll -.->|Ensures Today Schedule| S_Sched
     S_Rec -.->|Auto-recalculate Step| S_Ramp
     S_Stat -.->|Lazy Schedule Apply| S_Sched
+    S_Debt -.->|Rollover Rows| S_Sched
+    S_RunTask -.->|Split on Stop| S_Debt
+    S_Eve -.->|Debt to Date| S_Debt
 
     subgraph Storage
         Store[Storage Interface]
@@ -155,7 +159,6 @@ graph TD
     S_Ramp --> Store
     S_Eve --> Store
     S_Manage --> Store
-    S_Rest --> Store
     S_Sched --> Store
     S_Stat --> Store
     S_Task --> Store

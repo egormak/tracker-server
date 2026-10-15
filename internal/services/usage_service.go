@@ -14,6 +14,7 @@ const (
 	UsageStartBreakMood    = "start_break_mood"
 	UsageStartEvening      = "start_evening"
 	UsageStartCombo        = "start_combo"
+	UsageStartBatch        = "start_batch"
 	UsageEveningSkip       = "evening_skip"
 	UsageRampReset         = "ramp_reset"
 	UsageTimerExtend       = "timer_extend"
@@ -24,6 +25,7 @@ const (
 	OriginBreak   = "break"
 	OriginEvening = "evening"
 	OriginCombo   = "combo"
+	OriginBatch   = "batch"
 )
 
 // ClientUnknown stands for requests and records with no client name.

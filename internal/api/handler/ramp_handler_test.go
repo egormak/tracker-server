@@ -98,11 +98,11 @@ func TestRampHandler_GetStatus(t *testing.T) {
 			TodayFocusMinutes: 6,
 			Date:              "23 September 2026",
 			Config: entity.RampConfig{
-				CapMinutes:          25,
-				EnabledRoles:        []string{"work", "learn"},
-				EnabledTasks:        []string{"home_task"},
-				ExcludedTasks:       []string{"video"},
-				DefaultRestFallback: 15,
+				CapMinutes:             25,
+				EnabledRoles:           []string{"work", "learn"},
+				EnabledTasks:           []string{"home_task"},
+				ExcludedTasks:          []string{"video"},
+				DefaultFallbackMinutes: 15,
 			},
 		},
 	}
@@ -224,11 +224,11 @@ func TestRampHandler_Advance(t *testing.T) {
 func TestRampHandler_GetConfig(t *testing.T) {
 	mockSvc := &mockRampServiceForHandler{
 		config: entity.RampConfig{
-			CapMinutes:          20,
-			EnabledRoles:        []string{"work"},
-			EnabledTasks:        []string{"home_task"},
-			ExcludedTasks:       []string{"video"},
-			DefaultRestFallback: 10,
+			CapMinutes:             20,
+			EnabledRoles:           []string{"work"},
+			EnabledTasks:           []string{"home_task"},
+			ExcludedTasks:          []string{"video"},
+			DefaultFallbackMinutes: 10,
 		},
 	}
 	app := setupRampApp(mockSvc)
@@ -247,7 +247,7 @@ func TestRampHandler_GetConfig(t *testing.T) {
 		if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
-		if cfg.CapMinutes != 20 || cfg.DefaultRestFallback != 10 {
+		if cfg.CapMinutes != 20 || cfg.DefaultFallbackMinutes != 10 {
 			t.Errorf("unexpected config: %+v", cfg)
 		}
 	})
@@ -274,11 +274,11 @@ func TestRampHandler_UpdateConfig(t *testing.T) {
 
 	t.Run("valid config returns 200", func(t *testing.T) {
 		cfg := entity.RampConfig{
-			CapMinutes:          30,
-			EnabledRoles:        []string{"work", "learn"},
-			EnabledTasks:        []string{"home_task"},
-			ExcludedTasks:       []string{"games"},
-			DefaultRestFallback: 12,
+			CapMinutes:             30,
+			EnabledRoles:           []string{"work", "learn"},
+			EnabledTasks:           []string{"home_task"},
+			ExcludedTasks:          []string{"games"},
+			DefaultFallbackMinutes: 12,
 		}
 		bodyBytes, _ := json.Marshal(cfg)
 		req := httptest.NewRequest("PUT", "/api/v1/ramp/config", bytes.NewReader(bodyBytes))
@@ -296,6 +296,23 @@ func TestRampHandler_UpdateConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("old default_rest_fallback key is still accepted", func(t *testing.T) {
+		body := `{"cap_minutes":25,"enabled_roles":["work"],"enabled_tasks":[],"excluded_tasks":[],"default_rest_fallback":11}`
+		req := httptest.NewRequest("PUT", "/api/v1/ramp/config", bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if resp.StatusCode != fiber.StatusOK {
+			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+		if mockSvc.lastConfig.DefaultFallbackMinutes != 11 {
+			t.Errorf("expected the old key to set DefaultFallbackMinutes 11, got %d", mockSvc.lastConfig.DefaultFallbackMinutes)
+		}
+	})
+
 	t.Run("invalid json returns 400", func(t *testing.T) {
 		req := httptest.NewRequest("PUT", "/api/v1/ramp/config", bytes.NewReader([]byte("{invalid-json")))
 		req.Header.Set("Content-Type", "application/json")
@@ -310,7 +327,7 @@ func TestRampHandler_UpdateConfig(t *testing.T) {
 	})
 
 	t.Run("CapMinutes < 5 returns 400", func(t *testing.T) {
-		cfg := entity.RampConfig{CapMinutes: 4, DefaultRestFallback: 15}
+		cfg := entity.RampConfig{CapMinutes: 4, DefaultFallbackMinutes: 15}
 		bodyBytes, _ := json.Marshal(cfg)
 		req := httptest.NewRequest("PUT", "/api/v1/ramp/config", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
@@ -324,8 +341,8 @@ func TestRampHandler_UpdateConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("DefaultRestFallback < 1 returns 400", func(t *testing.T) {
-		cfg := entity.RampConfig{CapMinutes: 20, DefaultRestFallback: 0}
+	t.Run("DefaultFallbackMinutes < 1 returns 400", func(t *testing.T) {
+		cfg := entity.RampConfig{CapMinutes: 20, DefaultFallbackMinutes: 0}
 		bodyBytes, _ := json.Marshal(cfg)
 		req := httptest.NewRequest("PUT", "/api/v1/ramp/config", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")
@@ -341,7 +358,7 @@ func TestRampHandler_UpdateConfig(t *testing.T) {
 
 	t.Run("service error returns 500", func(t *testing.T) {
 		mockSvc.updateConfigErr = errors.New("failed update in service")
-		cfg := entity.RampConfig{CapMinutes: 20, DefaultRestFallback: 15}
+		cfg := entity.RampConfig{CapMinutes: 20, DefaultFallbackMinutes: 15}
 		bodyBytes, _ := json.Marshal(cfg)
 		req := httptest.NewRequest("PUT", "/api/v1/ramp/config", bytes.NewReader(bodyBytes))
 		req.Header.Set("Content-Type", "application/json")

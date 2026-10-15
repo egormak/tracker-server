@@ -16,10 +16,8 @@ const (
 	taskNamesList = "task_list"
 	roleInfo      = "role_info"
 
-	restDocName    = "Rest Info"
 	procentDocName = "Procent Info"
 	rampDocName    = "Ramp Info"
-	restCount      = 30
 )
 
 var roleTypes = [3]string{"work", "learn", "rest"}

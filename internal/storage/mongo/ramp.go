@@ -34,8 +34,12 @@ func (s *Storage) GetRampInfo(ctx context.Context) (entity.RampInfo, error) {
 	if ramp.CurrentStep <= 0 {
 		ramp.CurrentStep = 1
 	}
-	if ramp.DefaultRestFallback <= 0 {
-		ramp.DefaultRestFallback = 15
+	if ramp.DefaultFallbackMinutes <= 0 && ramp.LegacyRestFallback > 0 {
+		ramp.DefaultFallbackMinutes = ramp.LegacyRestFallback
+	}
+	ramp.LegacyRestFallback = 0
+	if ramp.DefaultFallbackMinutes <= 0 {
+		ramp.DefaultFallbackMinutes = 15
 	}
 	if ramp.EnabledRoles == nil {
 		ramp.EnabledRoles = []string{"work", "learn"}
@@ -100,12 +104,12 @@ func (s *Storage) ResetRampStep(ctx context.Context, date string, baselineMinute
 				"updated_at":             now,
 			},
 			"$setOnInsert": bson.M{
-				"title":                 rampDocName,
-				"cap_minutes":           25,
-				"enabled_roles":         []string{"work", "learn"},
-				"enabled_tasks":         []string{"home_task"},
-				"excluded_tasks":        []string{"video", "movies", "games", "telegram"},
-				"default_rest_fallback": 15,
+				"title":                    rampDocName,
+				"cap_minutes":              25,
+				"enabled_roles":            []string{"work", "learn"},
+				"enabled_tasks":            []string{"home_task"},
+				"excluded_tasks":           []string{"video", "movies", "games", "telegram"},
+				"default_fallback_minutes": 15,
 			},
 		},
 		opts,
@@ -135,12 +139,12 @@ func (s *Storage) UpdateRampStep(ctx context.Context, step int, date string) err
 				"updated_at":   now,
 			},
 			"$setOnInsert": bson.M{
-				"title":                 rampDocName,
-				"cap_minutes":           25,
-				"enabled_roles":         []string{"work", "learn"},
-				"enabled_tasks":         []string{"home_task"},
-				"excluded_tasks":        []string{"video", "movies", "games", "telegram"},
-				"default_rest_fallback": 15,
+				"title":                    rampDocName,
+				"cap_minutes":              25,
+				"enabled_roles":            []string{"work", "learn"},
+				"enabled_tasks":            []string{"home_task"},
+				"excluded_tasks":           []string{"video", "movies", "games", "telegram"},
+				"default_fallback_minutes": 15,
 			},
 		},
 		opts,

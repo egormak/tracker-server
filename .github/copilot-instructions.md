@@ -14,7 +14,7 @@
 - **Three roles**: `work`, `learn`, `rest` (defined in `internal/storage/mongo/mongo.go`).
 - **Task tracking**: Tasks have daily scheduled targets (`time_duration`), daily completion (`time_done`), and priority.
 - **Plan percent system**: Tasks organized into groups (`plan`, `work`, `learn`, `rest`) with percentage allocations determining next task selection.
-- **Rest balance**: Completing tasks automatically adds rest minutes (`AddRest`); rest activities deduct from the balance (`RestSpend`).
+- **Debt**: Unfinished schedule minutes of previous days this week (`services/debt_service.go`, `GET /api/v1/debt`) plus today's remainder; drives the stop-time split and evening ranking.
 - **Ramp warm-up**: Daily warm-up counter calculating steps $k = \min(\text{cap}, \lfloor(1+\sqrt{1+8S})/2\rfloor)$ from cumulative focus minutes $S$.
 
 ## Critical Data Flow Patterns
@@ -22,15 +22,16 @@
 ### Adding a Task Record (POST `/api/v1/taskrecord`)
 1. Handler (`taskrecord_handler.go`) validates request → Service (`taskrecord_service.go`).
 2. Service fetches task role → creates `entity.TaskRecord`.
-3. **Three-step storage sequence**: `AddTaskRecord()`, `AddRoleMinutes()`, `AddRest()`.
+3. **Two-step storage sequence**: `AddTaskRecord()`, then `AddRoleMinutes()`.
 4. **Post-record hook**: `RampService.AutoRecalculateOnRecord` runs best-effort (logs errors without failing the request).
 5. **Backfill & Strict tasks**: If `ManageByService` is set, backfills shortfalls from Monday to yesterday; if task is `TimeStrictly: true`, overtime beyond daily quota credits to tomorrow.
 
 ### Running Task Timer & WebSocket (POST `/api/v1/timer/run/...`)
 1. Serialized with `sync.Mutex` inside `RunningTaskService`.
 2. Starting or resuming a task pauses any currently running task.
-3. Broadcasts events (`TASK_STARTED`, `TASK_PAUSED`, `TASK_STOPPED`, `STATE_SYNC`) via WebSocket hub (`GET /api/v1/timer/ws`).
-4. Sends interactive Telegram messages with inline buttons (pause, stop, switch, extend, rest).
+3. Broadcasts events (`TASK_STARTED`, `TASK_PAUSED`, `TASK_STOPPED`, `STATE_SYNC`, `DAY_CLOSED`) via WebSocket hub (`GET /api/v1/timer/ws`).
+4. Sends interactive Telegram messages with inline buttons (pause, stop, extend, start next, break picker).
+5. **Split on stop** (`services/running_task_split.go`): `start` takes `debt_share` 0–100 (kept from a new start). A non-`source_day` session of ≥30s is split: share % → own past debt (oldest day first), rest → today up to target, excess → remaining own debt, leftover → tomorrow (strict tasks) or today. One record per destination; the response has the whole session in `time_duration` plus `split[]`.
 
 ### Background Workers
 - **`TimerWatchdog`** (`services/timer_watchdog.go`, runs every 10s):
@@ -68,7 +69,7 @@
 
 ### Storage (`internal/storage/mongo/`)
 - Database: `tasker`. Collections: `task_info`, `tasks`, `task_list`, `role_info`, `weekly_schedules`.
-- Special singleton documents in `task_info`: `"Rest Info"`, `"Procent Info"`, `"Ramp Info"`, `"Scheduler"`, `"Day List"`.
+- Special singleton documents in `task_info`: `"Procent Info"`, `"Ramp Info"`, `"Scheduler"`, `"Day List"`.
 - Indexes are initialized on startup via `EnsureIndexes(ctx)`.
 
 ## Configuration & Environment
@@ -127,5 +128,6 @@ See `openapi.yml` for the complete API contract.
 - `POST /api/v1/timer/run/heartbeat` - Refresh timer lease
 - `GET /api/v1/timer/ws` - WebSocket connection for timer updates
 - `GET /api/v1/ramp/status` - Current ramp warm-up status
-- `GET /api/v1/mode/evening-focus` - Prioritized catch-up task for evening focus
+- `GET /api/v1/mode/evening-focus` - Prioritized catch-up task for evening focus (ranked by debt to date)
+- `GET /api/v1/debt` - Previous days' debt, today's remainder, week strip
 - `POST /api/v1/schedule/apply` - Apply today's schedule tasks

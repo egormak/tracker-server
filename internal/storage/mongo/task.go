@@ -41,7 +41,6 @@ func (s *Storage) CleanRecords() {
 	database := s.Client.Database(dbName)
 
 	collRoleInfo := database.Collection(roleInfo)
-	collTaskInfo := database.Collection(taskInfo)
 	collTasks := database.Collection(tasksList)
 	collRunning := database.Collection(runningTaskCollection)
 
@@ -53,17 +52,6 @@ func (s *Storage) CleanRecords() {
 	// Flush running_task collection to remove stale zombie timers across weeks!
 	if _, err := collRunning.DeleteMany(s.Context, bson.M{}); err != nil {
 		slog.Error("clean-records: failed to delete running tasks", "error", err)
-	}
-
-	// In task_info, reset Rest count to 0 while preserving Procent Info and Day List!
-	today := time.Now().Format("2 January 2006")
-	if _, err := collTaskInfo.UpdateOne(
-		s.Context,
-		bson.M{"title": restDocName},
-		bson.M{"$set": bson.M{"restcount": 0, "date": today}},
-		options.Update().SetUpsert(true),
-	); err != nil {
-		slog.Error("clean-records: failed to reset rest count in task_info", "error", err)
 	}
 
 	// Usage counters live and die with the week's records

@@ -97,10 +97,13 @@ func (h *RampHandler) UpdateConfig(c *fiber.Ctx) error {
 			"message": "cap_minutes must be at least 5",
 		})
 	}
-	if cfg.DefaultRestFallback < 1 {
+	if cfg.DefaultFallbackMinutes < 1 && cfg.LegacyRestFallback >= 1 {
+		cfg.DefaultFallbackMinutes = cfg.LegacyRestFallback
+	}
+	if cfg.DefaultFallbackMinutes < 1 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
-			"message": "default_rest_fallback must be at least 1",
+			"message": "default_fallback_minutes must be at least 1",
 		})
 	}
 

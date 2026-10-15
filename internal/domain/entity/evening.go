@@ -8,13 +8,13 @@ type EveningFocusCandidate struct {
 	WeeklyGap    int    `json:"weekly_gap"` // Deficit in minutes (TimeDuration - TimeDone)
 	Priority     int    `json:"priority"`
 	IsStrict     bool   `json:"is_strict"`
+	DebtToDate   int    `json:"debt_to_date"` // previous days' debt + today's remainder; the ranking key
 }
 
 type EveningFocusResponse struct {
 	CurrentTask EveningFocusCandidate   `json:"current_task"`
 	Candidates  []EveningFocusCandidate `json:"candidates"`
 	SprintTime  int                     `json:"sprint_time"` // Default 20 min
-	RestPool    int                     `json:"rest_pool"`   // Default 10 min
 }
 
 type EveningFocusSkipRequest struct {

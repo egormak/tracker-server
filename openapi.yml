@@ -20,8 +20,8 @@ tags:
     description: Task management operations
   - name: TaskRecord
     description: Task record operations
-  - name: Rest
-    description: Rest time management
+  - name: Debt
+    description: Previous days' unfinished schedule of the current week
   - name: Statistics
     description: Statistical information
   - name: Role
@@ -61,7 +61,7 @@ paths:
       tags:
         - Statistics
       summary: Get Consolidated Dashboard State
-      description: Returns consolidated state including running task, today's tasks, rest pool, evening focus, and completion percentages in a single request.
+      description: Returns consolidated state including running task, today's tasks, evening focus, and completion percentages in a single request.
       operationId: getDashboardState
       responses:
         '200':
@@ -424,109 +424,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/rest/add:
-    post:
-      tags:
-        - Rest
-      summary: Add rest time
-      description: Add rest time to the account. Capped at a daily maximum ceiling of 6000 raw units (60 minutes).
-      operationId: addRest
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RestRecordRequest"
-      responses:
-        '200':
-          description: Rest time added successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '400':
-          description: Invalid input
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/rest/spend:
-    post:
-      tags:
-        - Rest
-      summary: Spend rest time
-      description: Spend rest time from the account
-      operationId: spendRest
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RestRecordRequest"
-      responses:
-        '200':
-          description: Rest time spent successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '400':
-          description: Invalid input
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/rest/get:
+  /api/v1/debt:
     get:
       tags:
-        - Rest
-      summary: Get rest time
-      description: Get available rest time in raw units (minutes * 100). Capped at a maximum ceiling of 6000 units (60 minutes).
-      operationId: getRest
+        - Debt
+      summary: Get the debt of the current week
+      description: >-
+        The debt is the unfinished schedule of the previous days of this week (Monday up to
+        yesterday), per task and day, computed like `/schedule/active/rollover`. It is never
+        capped or forgiven; it shrinks when a stopped timer pays it (see `/timer/run/stop`) and
+        is wiped with the records by `/records/clean`. `days` is the week strip.
+      operationId: getDebt
       responses:
         '200':
-          description: Rest time retrieved successfully
+          description: Debt summary
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RestTimeResponse"
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    $ref: "#/components/schemas/DebtSummary"
         '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/rest/reset:
-    post:
-      tags:
-        - Rest
-      summary: Reset rest balance
-      description: Resets available rest balance to 0 for today
-      operationId: resetRest
-      responses:
-        '200':
-          description: Rest was reset successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '500':
-          description: Internal server error
+          description: Internal server error (e.g. no active schedule)
           content:
             application/json:
               schema:
@@ -619,7 +542,7 @@ paths:
       tags:
         - Ramp
       summary: Update warm-up ramp configuration
-      description: Updates ramp configuration rules including cap_minutes (minimum 5) and default_rest_fallback (minimum 1).
+      description: Updates ramp configuration rules including cap_minutes (minimum 5) and default_fallback_minutes (minimum 1). The old key `default_rest_fallback` is still accepted on input.
       operationId: updateRampConfig
       requestBody:
         required: true
@@ -1348,8 +1271,8 @@ paths:
         - TaskRecord
       summary: Clean all records (weekly wipe)
       description: >-
-        Erases all task records, running tasks, role totals and usage counters, and resets the
-        rest balance. Before erasing, stores one weekly digest snapshot (see
+        Erases all task records, running tasks, role totals and usage counters (and with the
+        records the week's debt). Before erasing, stores one weekly digest snapshot (see
         `GET /api/v1/stats/weekly/digest`): the previous week when it still has records, otherwise
         the current one. An empty digest is not stored, so a repeated wipe keeps the snapshot.
       operationId: cleanRecords
@@ -1662,7 +1585,17 @@ paths:
       tags:
         - RunningTimer
       summary: Stop a running task timer
-      description: Stops the running task, records duration to database, adds rest time and forward overtime credit if strict. A started minute counts as one, but a run shorter than 30 seconds is a mis-start and is not recorded (`time_duration` 0, its Telegram start card is deleted).
+      description: >-
+        Stops the running task and records it. A started minute counts as one, but a run shorter
+        than 30 seconds is a mis-start and is not recorded (`time_duration` 0, its Telegram start
+        card is deleted). A session started with `source_day` is recorded on that day as is. Any
+        other session is split: (1) `debt_share` % of it pays the task's own previous-days debt,
+        oldest day first, each day at most its shortfall, the unused part returns; (2) the rest
+        goes to today up to today's target; (3) the excess beyond the target pays the rest of the
+        task's debt; (4) what is left goes to tomorrow for a strict task (forward credit), to today
+        for the others. Each destination is a separate stored record; the response record carries
+        the whole session in `time_duration` and the destinations in `split`. A past day whose
+        schedule becomes fully done emits a `DAY_CLOSED` WebSocket event.
       operationId: stopRunningTask
       requestBody:
         content:
@@ -1847,7 +1780,11 @@ paths:
       tags:
         - RunningTimer
       summary: Real-Time Timer WebSocket
-      description: WebSocket stream for real-time timer state updates and heartbeat messaging.
+      description: >-
+        WebSocket stream for real-time timer state updates and heartbeat messaging. Event types:
+        TASK_STARTED, TASK_PAUSED, TASK_RESUMED, TASK_STOPPED (data = the stopped record with
+        `split`), TASK_ADJUSTED, HEARTBEAT_ACK, STATE_SYNC, DAY_CLOSED (data = `{day, date}`, a
+        previous day's schedule became fully done).
       operationId: timerWebSocket
       responses:
         '101':
@@ -1858,7 +1795,7 @@ paths:
       tags:
         - EveningMode
       summary: Get Evening Focus Recommendation
-      description: Returns the recommended micro-sprint task for evening catch-up, ranked by least completed time for the week.
+      description: Returns the recommended sprint task for evening catch-up. Candidates (never work/english) are ranked by debt_to_date (previous days' debt plus today's remainder), then by weekly_gap, then by name.
       operationId: getEveningFocus
       parameters:
         - name: category
@@ -2270,28 +2207,6 @@ components:
         task_name: "Programming"
         percent: 80
         time_left: 24
-
-    RestRecordRequest:
-      type: object
-      properties:
-        rest_time:
-          type: integer
-          description: Rest time in minutes
-      required:
-        - rest_time
-      example:
-        rest_time: 15
-
-    RestTimeResponse:
-      type: object
-      properties:
-        rest_time:
-          type: integer
-          description: Available rest time in raw units (minutes * 100). Capped at a maximum ceiling of 6000 units (60 minutes).
-      required:
-        - rest_time
-      example:
-        rest_time: 4500
 
     CreateTaskRequest:
       type: object
@@ -2898,11 +2813,20 @@ components:
           type: string
         origin:
           type: string
-          enum: [break, evening, combo]
+          enum: [break, evening, combo, batch]
           description: >-
             How the task was chosen, for the weekly usage counters: `break` (break selector),
-            `evening` (evening focus), `combo` (combo chain step). Omitted or anything else counts
-            as a manual start. Counted only when a new task starts, not on resume.
+            `evening` (evening focus), `combo` (combo chain step), `batch` (evening batch sprint).
+            Omitted or anything else counts as a manual start. Counted only when a new task starts,
+            not on resume.
+        debt_share:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 0
+          description: >-
+            Percent of the session that pays the task's own previous-days debt on stop (see
+            `/timer/run/stop`). Stored only when a new task starts; outside 0–100 is a 400.
       required:
         - task_name
 
@@ -3035,6 +2959,10 @@ components:
         is_strict:
           type: boolean
           example: false
+        debt_to_date:
+          type: integer
+          description: Previous days' debt plus today's remainder for this task; the ranking key
+          example: 56
       required:
         - task_name
         - role
@@ -3053,10 +2981,6 @@ components:
           type: integer
           description: Sprint duration in minutes
           example: 20
-        rest_pool:
-          type: integer
-          description: Rest pool allowance in minutes
-          example: 10
       required:
         - current_task
         - candidates
@@ -3168,11 +3092,97 @@ components:
           type: string
           description: Client that created the record (`X-Tracker-Client`); absent when it did not identify itself
           example: "cli"
+        split:
+          type: array
+          description: Only on the record a timer stop returns — where the session's minutes went
+          items:
+            $ref: "#/components/schemas/SplitPart"
       required:
         - name
         - role
         - time_duration
         - date
+
+    SplitPart:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [today, debt, tomorrow]
+        day:
+          type: string
+          example: "wednesday"
+        date:
+          type: string
+          example: "14 October 2026"
+        minutes:
+          type: integer
+          example: 15
+      required: [kind, day, date, minutes]
+
+    DebtItem:
+      type: object
+      properties:
+        task_name:
+          type: string
+          example: "home_task"
+        role:
+          type: string
+          example: "rest"
+        day:
+          type: string
+          example: "wednesday"
+        date:
+          type: string
+          example: "14 October 2026"
+        remaining:
+          type: integer
+          example: 36
+      required: [task_name, role, day, date, remaining]
+
+    DebtDay:
+      type: object
+      properties:
+        day:
+          type: string
+          example: "tuesday"
+        date:
+          type: string
+          example: "13 October 2026"
+        planned:
+          type: integer
+          example: 500
+        remaining:
+          type: integer
+          example: 40
+        status:
+          type: string
+          enum: [closed, partial, open, today, future, none]
+      required: [day, date, planned, remaining, status]
+
+    DebtSummary:
+      type: object
+      properties:
+        total_minutes:
+          type: integer
+          example: 126
+        items:
+          type: array
+          description: Previous days only, oldest day first, then task priority
+          items:
+            $ref: "#/components/schemas/DebtItem"
+        oldest_day:
+          type: string
+          example: "tuesday"
+        today_remaining:
+          type: integer
+          example: 229
+        days:
+          type: array
+          description: Monday to Sunday
+          items:
+            $ref: "#/components/schemas/DebtDay"
+      required: [total_minutes, items, today_remaining, days]
 
     DashboardStateResponse:
       type: object
@@ -3184,10 +3194,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TaskResult"
-        rest_pool:
-          type: integer
-          description: Rest pool balance in raw units (units = minutes * 100)
-          example: 3000
         evening_focus:
           $ref: "#/components/schemas/EveningFocusResponse"
           nullable: true
@@ -3205,7 +3211,6 @@ components:
           example: 75
       required:
         - today_tasks
-        - rest_pool
         - total_planned
         - total_done
         - completion_pct
@@ -3280,16 +3285,16 @@ components:
           items:
             type: string
           example: ["video", "movies", "games", "telegram"]
-        default_rest_fallback:
+        default_fallback_minutes:
           type: integer
-          description: Fallback duration in minutes for excluded/rest tasks
+          description: Timer length in minutes for tasks outside the ramp (old input key `default_rest_fallback` is still accepted)
           example: 15
       required:
         - cap_minutes
         - enabled_roles
         - enabled_tasks
         - excluded_tasks
-        - default_rest_fallback
+        - default_fallback_minutes
 
 
 

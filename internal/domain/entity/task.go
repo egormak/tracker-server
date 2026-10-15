@@ -11,6 +11,8 @@ type TaskRecord struct {
 	SourceDay    string    `bson:"source_day,omitempty" json:"source_day,omitempty"`
 	CreatedAt    time.Time `bson:"created_at,omitempty" json:"created_at,omitempty"`
 	SourceDevice string    `bson:"source_device,omitempty" json:"source_device,omitempty"`
+	// Split is set only on the record a timer stop returns: where the session's minutes went.
+	Split []SplitPart `bson:"-" json:"split,omitempty"`
 }
 
 type TaskRecordRequest struct {

@@ -18,16 +18,18 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	taskService := services.NewTaskService(mongoconn, notify)
 	rampService := services.NewRampService(mongoconn)
 	taskRecordService := services.NewTaskRecordService(mongoconn, rampService)
-	restService := services.NewRestService(mongoconn)
 	scheduleService := services.NewScheduleService(mongoconn)
 	statsService := services.NewStatisticService(mongoconn, scheduleService)
+	debtService := services.NewDebtService(scheduleService)
 	manageService := services.NewManageService(mongoconn)
 	runningTaskService := services.NewRunningTaskService(mongoconn, notify)
 	runningTaskService.SetRampService(rampService)
+	runningTaskService.SetDebtProvider(debtService)
 	if hub != nil {
 		runningTaskService.SetHub(hub)
 	}
-	eveningService := services.NewEveningService(statsService, restService)
+	eveningService := services.NewEveningService(statsService)
+	eveningService.SetDebtProvider(debtService)
 	runningTaskService.SetBreakOptionsProvider(eveningService)
 	usageService := services.NewUsageService(mongoconn)
 	runningTaskService.SetUsageService(usageService)
@@ -39,12 +41,12 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	taskHandler := handler.NewTaskHandler(taskService)
 	taskRecordHandler := handler.NewTaskRecordHandler(taskRecordService, scheduleService)
 	rampHandler := handler.NewRampHandler(rampService)
-	restHandler := handler.NewRestHandler(restService)
-	statsHandler := handler.NewStatisticHandler(statsService, runningTaskService, restService, eveningService)
+	statsHandler := handler.NewStatisticHandler(statsService, runningTaskService, eveningService)
 	manageHandler := handler.NewManageHandler(manageService)
 	scheduleHandler := handler.NewScheduleHandler(scheduleService)
 	runningTaskHandler := handler.NewRunningTaskHandler(runningTaskService, hub)
 	eveningHandler := handler.NewEveningHandler(eveningService)
+	debtHandler := handler.NewDebtHandler(debtService)
 	roleHandler := handler.NewRoleHandler(mongoconn, notify)
 	legacyTimerHandler := handler.NewLegacyTimerHandler(mongoconn)
 	telegramHandler := handler.NewTelegramHandler(notify)
@@ -67,11 +69,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Get("/v1/task/plan/percent/schedule", taskRecordHandler.GetTaskPlanPercentWithSchedule)
 	api.Post("/v1/task/plan/rotate", taskRecordHandler.ChangeGroupPlanPercent)
 
-	// Rest
-	api.Post("/v1/rest/add", restHandler.RestAdd)
-	api.Post("/v1/rest/spend", restHandler.RestSpend)
-	api.Get("/v1/rest/get", restHandler.RestGet)
-	api.Post("/v1/rest/reset", restHandler.RestReset)
+	// Debt: the previous days' unfinished schedule of this week
+	api.Get("/v1/debt", debtHandler.GetDebt)
 
 	// Ramp
 	api.Get("/v1/ramp/status", rampHandler.GetStatus)

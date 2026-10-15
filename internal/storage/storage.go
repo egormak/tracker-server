@@ -6,8 +6,6 @@ import (
 )
 
 type Storage interface {
-	RestSpend(restTime int) error
-	RestSpendUnits(units int) error
 	GetRecords() ([]entity.TaskRecord, error)
 	GetRecordsForDates(dates []string) ([]entity.TaskRecord, error)
 	GetRecordsForDatesOrSourceDays(dates []string, sourceDays []string) ([]entity.TaskRecord, error)
@@ -28,12 +26,6 @@ type Storage interface {
 	AddTaskRecord(task entity.TaskRecord) error
 	AddRoleMinutes(task entity.TaskRecord) error
 	GetRole(taskName string) (string, error)
-	AddRest(restTime int) error
-	AddRestMinutes(minutes int) error
-	AddRestUnits(units int) error
-	AddTaskEarnedRest(workMinutes int) error
-	GetRest() (int, error)
-	ResetRest() error
 	ProcentsSet(procentM entity.PlanPercents) error
 	GetPlanProcents() (entity.PlanPercents, error)
 	GetGroupPlanPercent() (int, error)

@@ -44,15 +44,6 @@ func (m *mockRunningTaskProvider) GetStatus(taskName string) (entity.RunningTask
 	return m.task, m.err
 }
 
-type mockRestProvider struct {
-	units int
-	err   error
-}
-
-func (m *mockRestProvider) GetRest() (int, error) {
-	return m.units, m.err
-}
-
 type mockEveningProvider struct {
 	focus entity.EveningFocusResponse
 	err   error
@@ -80,9 +71,6 @@ func TestStatisticHandler_GetDashboardState(t *testing.T) {
 				StartTime: now,
 			},
 		}
-		restSvc := &mockRestProvider{
-			units: 3000, // 30 minutes in raw units (minutes * 100)
-		}
 		eveningSvc := &mockEveningProvider{
 			focus: entity.EveningFocusResponse{
 				CurrentTask: entity.EveningFocusCandidate{TaskName: "reading", Role: "learn", WeeklyGap: 45},
@@ -93,11 +81,10 @@ func TestStatisticHandler_GetDashboardState(t *testing.T) {
 					{TaskName: "extra", Role: "other", WeeklyGap: 10},
 				},
 				SprintTime: 20,
-				RestPool:   30,
 			},
 		}
 
-		h := NewStatisticHandler(statSvc, runningSvc, restSvc, eveningSvc)
+		h := NewStatisticHandler(statSvc, runningSvc, eveningSvc)
 		app := fiber.New()
 		app.Get("/api/v1/dashboard/state", h.GetDashboardState)
 
@@ -141,11 +128,6 @@ func TestStatisticHandler_GetDashboardState(t *testing.T) {
 			t.Errorf("expected CompletionPct 66, got %d", dashResp.CompletionPct)
 		}
 
-		// Verify RestPool (units = minutes * 100)
-		if dashResp.RestPool != 3000 {
-			t.Errorf("expected RestPool 3000, got %d", dashResp.RestPool)
-		}
-
 		// Verify EveningFocus candidates capped at 3
 		if dashResp.EveningFocus == nil {
 			t.Fatalf("expected EveningFocus not nil")
@@ -159,7 +141,7 @@ func TestStatisticHandler_GetDashboardState(t *testing.T) {
 		statSvc := &mockStatService{
 			todayErr: errors.New("db error"),
 		}
-		h := NewStatisticHandler(statSvc, nil, nil, nil)
+		h := NewStatisticHandler(statSvc, nil, nil)
 		app := fiber.New()
 		app.Get("/api/v1/dashboard/state", h.GetDashboardState)
 

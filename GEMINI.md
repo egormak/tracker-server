@@ -12,7 +12,7 @@ The central REST API hub for the tracker system. Built with Go and Fiber, using 
   - `internal/api/middleware/telegram.go`: Authentication middleware (`TelegramAuth`) supporting `X-Bot-Token` or HMAC-signed `X-Telegram-Init-Data` validation against `telegram.room_id`.
   - `internal/api/handler/`: Consolidated HTTP handler layer (the legacy `internal/handler/` package has been completely eliminated and folded here). Handlers parse/validate requests, invoke services, and return JSON responses.
   - `internal/realtime/hub.go`: WebSocket broadcast hub (`GET /api/v1/timer/ws`) broadcasting timer state changes to connected clients.
-  - `internal/services/`: Business logic domain services (tasks, taskrecords, plan, rest, schedule, running_task, evening, ramp, day_roll, timer_watchdog).
+  - `internal/services/`: Business logic domain services (tasks, taskrecords, plan, schedule, running_task + `running_task_split`, debt, evening, ramp, day_roll, timer_watchdog).
   - `internal/storage/`: Shared storage contract (`internal/storage/storage.go`) and MongoDB adapter (`internal/storage/mongo/`).
   - `internal/domain/entity/`: Typed domain entities.
   - `internal/notify/`: Telegram notification service with interactive inline action keyboards.
@@ -23,7 +23,7 @@ The API is versioned under `/api/v1/`. Key route groups:
 - **Dashboard**: `GET /api/v1/dashboard/state`
 - **Tasks & Records**: `/api/v1/task/...`, `/api/v1/taskrecord`, `/api/v1/records/...`
 - **Planning**: `/api/v1/task/plan/percent`, `/api/v1/task/plan/percent/schedule`, `/api/v1/task/plan/rotate`, `/api/v1/manage/plan-percents/...`, `/api/v1/manage/procents`
-- **Rest**: `/api/v1/rest/get`, `/api/v1/rest/add`, `/api/v1/rest/spend`, `/api/v1/rest/reset`
+- **Debt**: `GET /api/v1/debt` (previous days' debt this week, today's remainder, week strip)
 - **Ramp Warm-up**: `/api/v1/ramp/status`, `/api/v1/ramp/reset`, `/api/v1/ramp/advance`, `/api/v1/ramp/config`
 - **Schedule**: `/api/v1/schedule/...` (CRUD, active, rollover, today, apply, task-time adjustment)
 - **Statistics**: `/api/v1/stats/done/today`, `/api/v1/stats/tasks/today`, `/api/v1/stats/weekly`, `/api/v1/tasklist`
@@ -36,10 +36,11 @@ Refer to `openapi.yml` for the definitive OpenAPI 3.0 specification.
 ## Core Business Logic Rules
 
 - **Plan-Percent Auto-Rotation**: `GetTaskPlanPercent` automatically loops through and rotates to the next task group when current group percentages are depleted.
-- **Record Multi-Step Persistence**: Recording time via `TaskRecordService.AddRecord` executes `AddTaskRecord` → `AddRoleMinutes` → `AddRest` sequentially, followed by a best-effort `RampService.AutoRecalculateOnRecord`.
+- **Record Multi-Step Persistence**: Recording time via `TaskRecordService.AddRecord` executes `AddTaskRecord` → `AddRoleMinutes` sequentially, followed by a best-effort `RampService.AutoRecalculateOnRecord`.
 - **Ramp Warm-Up**: Daily focus warm-up steps are calculated as $k = \min(\text{cap}, \lfloor(1+\sqrt{1+8S})/2\rfloor)$ from cumulative focus minutes $S$. State lives in `"Ramp Info"` and resets lazily on the first read of a new calendar day.
 - **Source Day & Backfill**: Records can target past weekdays (`source_day`). When `ManageByService` is active, backfill checks Monday→yesterday against the active schedule to fill shortfalls before applying remaining time to today.
 - **Dynamic Forward Overtime Credit**: For strict tasks (`TimeStrictly: true`), completed minutes past the scheduled daily target are automatically credited to tomorrow (`source_day = tomorrow`).
+- **Debt and Split on Stop** (`debt_service.go`, `running_task_split.go`): `POST /timer/run/start` takes `debt_share` 0–100 (stored on a new start only) and origin `batch`. A non-`source_day` session of ≥30s is split on stop: share % → own past debt oldest day first (unused returns), rest → today up to target, excess → remaining own debt, leftover → tomorrow for strict tasks, today for others. One record per destination; the returned record has the whole session in `time_duration` plus `split[]`. A past day that becomes fully done emits `DAY_CLOSED` and adds notes to the completion card.
 - **Running Task Mutex**: `RunningTaskService` uses a `sync.Mutex` lock to serialize concurrent timer actions across clients. Only one task can be `IsRunning` at any time; starting/resuming a task auto-pauses any active task.
 - **Timer Watchdog Worker**: Runs every 10 seconds:
   1. Auto-stops tasks when `TargetDuration` is reached.
@@ -47,8 +48,8 @@ Refer to `openapi.yml` for the definitive OpenAPI 3.0 specification.
   3. Auto-pauses tasks if client heartbeats stop for longer than the 3-minute lease (`LastHeartbeatAt`).
 - **Day-Roll Worker & Schedule Auto-Apply**: Runs every 30 seconds. On startup and midnight date boundaries, `EnsureTodaySchedule()` idempotently checks and applies today's schedule from the active weekly schedule.
 - **Schedule Fallback in Statistics**: `StatisticService.ShowTaskList` automatically triggers `EnsureTodaySchedule()` if today's task list is empty.
-- **Evening Catch-Up Mode**: Micro-sprint queue targeting weekly deficit tasks while excluding `work` and `english`. In-memory snoozed tasks reset once per calendar day.
-- **Realtime WebSocket Hub**: `RunningTaskService` broadcasts timer lifecycle events (`TASK_STARTED`, `TASK_PAUSED`, `TASK_STOPPED`, `STATE_SYNC`) to clients on `GET /api/v1/timer/ws`.
+- **Evening Catch-Up Mode**: Micro-sprint queue ranked by debt to date (previous days' debt + today's remainder), then weekly gap, then name, excluding `work` and `english`. In-memory snoozed tasks reset once per calendar day.
+- **Realtime WebSocket Hub**: `RunningTaskService` broadcasts timer lifecycle events (`TASK_STARTED`, `TASK_PAUSED`, `TASK_STOPPED`, `STATE_SYNC`, `DAY_CLOSED`) to clients on `GET /api/v1/timer/ws`.
 - **Date Format**: Standard day-level record date format across MongoDB collections is `time.Now().Format("2 January 2006")`.
 
 ## Building and Running

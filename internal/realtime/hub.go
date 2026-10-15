@@ -19,6 +19,7 @@ const (
 	EventTaskAdjusted EventType = "TASK_ADJUSTED"
 	EventHeartbeatAck EventType = "HEARTBEAT_ACK"
 	EventStateSync    EventType = "STATE_SYNC"
+	EventDayClosed    EventType = "DAY_CLOSED" // a previous day's schedule became fully done
 )
 
 type Event struct {

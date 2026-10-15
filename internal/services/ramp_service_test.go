@@ -257,7 +257,7 @@ func TestRamp_Advance(t *testing.T) {
 func TestRamp_RoleFiltering(t *testing.T) {
 	mock := newMockRampStorage()
 	mock.ramp.CurrentStep = 7
-	mock.ramp.DefaultRestFallback = 15
+	mock.ramp.DefaultFallbackMinutes = 15
 	mock.roles["coding"] = "work"
 	mock.roles["reading"] = "learn"
 	mock.roles["gaming"] = "rest"
@@ -303,29 +303,29 @@ func TestRamp_UpdateConfig(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Validation: CapMinutes < 5 fails", func(t *testing.T) {
-		cfg := entity.RampConfig{CapMinutes: 4, DefaultRestFallback: 15}
+		cfg := entity.RampConfig{CapMinutes: 4, DefaultFallbackMinutes: 15}
 		_, err := svc.UpdateConfig(ctx, cfg)
 		if err == nil {
 			t.Errorf("expected error for CapMinutes < 5, got nil")
 		}
 	})
 
-	t.Run("Validation: DefaultRestFallback < 1 fails", func(t *testing.T) {
-		cfg := entity.RampConfig{CapMinutes: 20, DefaultRestFallback: 0}
+	t.Run("Validation: DefaultFallbackMinutes < 1 fails", func(t *testing.T) {
+		cfg := entity.RampConfig{CapMinutes: 20, DefaultFallbackMinutes: 0}
 		_, err := svc.UpdateConfig(ctx, cfg)
 		if err == nil {
-			t.Errorf("expected error for DefaultRestFallback < 1, got nil")
+			t.Errorf("expected error for DefaultFallbackMinutes < 1, got nil")
 		}
 	})
 
 	t.Run("Valid config updates and clamps current_step if needed", func(t *testing.T) {
 		mock.ramp.CurrentStep = 15
 		cfg := entity.RampConfig{
-			CapMinutes:          10,
-			EnabledRoles:        []string{"work", "learn", "side_project"},
-			EnabledTasks:        []string{"planning"},
-			ExcludedTasks:       []string{"social_media"},
-			DefaultRestFallback: 20,
+			CapMinutes:             10,
+			EnabledRoles:           []string{"work", "learn", "side_project"},
+			EnabledTasks:           []string{"planning"},
+			ExcludedTasks:          []string{"social_media"},
+			DefaultFallbackMinutes: 20,
 		}
 
 		status, err := svc.UpdateConfig(ctx, cfg)
@@ -339,8 +339,8 @@ func TestRamp_UpdateConfig(t *testing.T) {
 		if status.CurrentStep != 10 {
 			t.Errorf("expected CurrentStep clamped to 10, got %d", status.CurrentStep)
 		}
-		if status.Config.DefaultRestFallback != 20 {
-			t.Errorf("expected DefaultRestFallback=20, got %d", status.Config.DefaultRestFallback)
+		if status.Config.DefaultFallbackMinutes != 20 {
+			t.Errorf("expected DefaultFallbackMinutes=20, got %d", status.Config.DefaultFallbackMinutes)
 		}
 		if !mock.saveInfoCalled {
 			t.Errorf("expected SaveRampInfo to be called on storage")
@@ -419,7 +419,6 @@ func (m *mockTaskRecordStorageForRamp) AddTaskRecord(task entity.TaskRecord) err
 	return nil
 }
 func (m *mockTaskRecordStorageForRamp) AddRoleMinutes(task entity.TaskRecord) error { return nil }
-func (m *mockTaskRecordStorageForRamp) AddRest(restTime int) error                  { return nil }
 func (m *mockTaskRecordStorageForRamp) GetGroupPlanPercent() (int, error)           { return 0, nil }
 func (m *mockTaskRecordStorageForRamp) GetGroupPercent(g int) (int, error)          { return 0, nil }
 func (m *mockTaskRecordStorageForRamp) CheckIfPlanPercentEmpty() error              { return nil }
@@ -631,7 +630,7 @@ func TestRamp_ManualReset_BaselineRebasedOnConfigChange(t *testing.T) {
 		mock, svc := newResetService(t)
 
 		status, err := svc.UpdateConfig(ctx, entity.RampConfig{
-			CapMinutes: 25, EnabledRoles: []string{"work"}, DefaultRestFallback: 15,
+			CapMinutes: 25, EnabledRoles: []string{"work"}, DefaultFallbackMinutes: 15,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error on UpdateConfig: %v", err)
@@ -654,7 +653,7 @@ func TestRamp_ManualReset_BaselineRebasedOnConfigChange(t *testing.T) {
 		mock, svc := newResetService(t)
 
 		if _, err := svc.UpdateConfig(ctx, entity.RampConfig{
-			CapMinutes: 25, EnabledRoles: []string{"work", "learn", "home"}, DefaultRestFallback: 15,
+			CapMinutes: 25, EnabledRoles: []string{"work", "learn", "home"}, DefaultFallbackMinutes: 15,
 		}); err != nil {
 			t.Fatalf("unexpected error on UpdateConfig: %v", err)
 		}

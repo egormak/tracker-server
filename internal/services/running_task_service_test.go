@@ -242,6 +242,7 @@ type completionCall struct {
 	NextTask       string
 	MsgID          int
 	BreakOptions   []entity.BreakOption
+	Notes          []string
 }
 
 func (m *mockRunningTaskNotify) SendMessageStart(taskName string) (int, error) {
@@ -254,7 +255,7 @@ func (m *mockRunningTaskNotify) SendMessageStop(taskName string, timeDone int, m
 	return nil
 }
 
-func (m *mockRunningTaskNotify) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int, breakOptions []entity.BreakOption) error {
+func (m *mockRunningTaskNotify) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int, breakOptions []entity.BreakOption, notes []string) error {
 	m.completionCalls = append(m.completionCalls, completionCall{
 		TaskName:       taskName,
 		TimeDone:       timeDone,
@@ -264,6 +265,7 @@ func (m *mockRunningTaskNotify) SendMessageCompletion(taskName string, timeDone 
 		NextTask:       nextTask,
 		MsgID:          msgID,
 		BreakOptions:   breakOptions,
+		Notes:          notes,
 	})
 	return nil
 }

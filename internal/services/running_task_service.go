@@ -21,7 +21,6 @@ type RunningTaskStorage interface {
 	GetRole(taskName string) (string, error)
 	AddTaskRecord(task entity.TaskRecord) error
 	AddRoleMinutes(task entity.TaskRecord) error
-	AddRest(restTime int) error
 	TimeListDelDB(timeDuretion int) error
 	GetTodayTaskDuration(taskName string) (int, error)
 	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
@@ -34,6 +33,12 @@ type BreakOptionsProvider interface {
 	GetBreakOptions() (entity.BreakOptionsResponse, error)
 }
 
+// DebtProvider gives the previous days' debt the stop split pays into.
+type DebtProvider interface {
+	TaskDebt(taskName string) ([]entity.DebtItem, error)
+	DayClosed(day string) (bool, error)
+}
+
 // minRecordedRun is the shortest stopped run that becomes a task record.
 const minRecordedRun = 30 * time.Second
 
@@ -44,6 +49,7 @@ type RunningTaskService struct {
 	rampService  RampRecalculator
 	breakOptions BreakOptionsProvider
 	usage        *UsageService
+	debt         DebtProvider
 	mu           sync.Mutex
 }
 
@@ -57,6 +63,7 @@ type StartOptions struct {
 	SourceDay      string
 	Client         string
 	Origin         string
+	DebtShare      int // 0–100: % of the session sent to the task's past debt on stop
 }
 
 func NewRunningTaskService(st RunningTaskStorage, nt notify.Notify) *RunningTaskService {
@@ -74,6 +81,13 @@ func (s *RunningTaskService) SetBreakOptionsProvider(p BreakOptionsProvider) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.breakOptions = p
+}
+
+// SetDebtProvider enables paying the previous days' debt on stop.
+func (s *RunningTaskService) SetDebtProvider(p DebtProvider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.debt = p
 }
 
 // SetUsageService enables weekly usage counters for task starts.
@@ -101,6 +115,8 @@ func (s *RunningTaskService) startEvent(origin, taskName string) string {
 		return UsageStartEvening
 	case OriginCombo:
 		return UsageStartCombo
+	case OriginBatch:
+		return UsageStartBatch
 	case OriginBreak:
 		if s.breakOptions != nil {
 			if resp, err := s.breakOptions.GetBreakOptions(); err == nil {
@@ -184,6 +200,7 @@ func (s *RunningTaskService) StartWith(opts StartOptions) (entity.RunningTask, e
 		TargetDuration:  targetDuration,
 		SourceDay:       sourceDay,
 		SourceDevice:    opts.Client,
+		DebtShare:       clampShare(opts.DebtShare),
 	}
 
 	// Classified before the task exists: the break selector ranks by logged time.
@@ -248,50 +265,12 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 		duration = 1
 	}
 
-	// Check if this task is strict and whether it exceeds today's schedule target time
-	isStrict, _ := s.st.IsTaskStrict(task.TaskName)
-	if isStrict && task.SourceDay == "" {
-		targetMin := GetScheduledTargetTime(s.st, task.TaskName)
-		if targetMin > 0 {
-			todayDone, _ := s.st.GetTodayTaskDuration(task.TaskName)
-			if todayDone+duration > targetMin {
-				todayAllowed := targetMin - todayDone
-				if todayAllowed < 0 {
-					todayAllowed = 0
-				}
-
-				overtime := duration - todayAllowed
-				if overtime > 0 {
-					duration = todayAllowed
-
-					// Create credit record for TOMORROW
-					tomorrowDay := GetTomorrowDayName()
-					tomorrowDate := CalculateDateForTomorrow()
-					overtimeRecord := entity.TaskRecord{
-						Name:         task.TaskName,
-						Role:         task.Role,
-						TimeDuration: overtime,
-						Date:         tomorrowDate,
-						SourceDay:    tomorrowDay,
-						CreatedAt:    time.Now().UTC(),
-						SourceDevice: task.SourceDevice,
-					}
-
-					if err := s.st.AddTaskRecord(overtimeRecord); err == nil {
-						fmt.Printf("🎉 STRICT TASK OVERTIME CREDITED TO TOMORROW (from timer): %d min to %s (%s)\n", overtime, tomorrowDay, tomorrowDate)
-						_ = s.st.AddRoleMinutes(overtimeRecord)
-						_ = s.st.AddRest(overtime)
-					}
-				}
-			}
-		}
-	}
-
 	recordDate := time.Now().Format("2 January 2006")
 	if task.SourceDay != "" {
 		recordDate = CalculateDateForDay(task.SourceDay)
 	}
 
+	// The session as the caller sees it: all its minutes; Split says where they went.
 	record := entity.TaskRecord{
 		Name:         task.TaskName,
 		Role:         task.Role,
@@ -302,22 +281,53 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 		SourceDevice: task.SourceDevice,
 	}
 
+	var notes []string
+	var closedDays []entity.DayClosedEvent
 	if duration > 0 {
-		if err := s.st.AddTaskRecord(record); err != nil {
-			return entity.TaskRecord{}, fmt.Errorf("failed to save task record: %w", err)
+		parts := []entity.SplitPart{{Kind: entity.SplitToday, Day: strings.ToLower(task.SourceDay), Date: recordDate, Minutes: duration}}
+		if task.SourceDay == "" {
+			// An explicit backfill (SourceDay) goes where it was sent; a regular session is split.
+			parts = s.splitSession(task, duration)
 		}
-
-		if err := s.st.AddRoleMinutes(record); err != nil {
-			fmt.Printf("failed to add role minutes: %v\n", err)
-		}
-		if err := s.st.AddRest(record.TimeDuration); err != nil {
-			fmt.Printf("failed to add rest: %v\n", err)
-		}
-		if s.rampService != nil {
-			if err := s.rampService.AutoRecalculateOnRecord(context.Background(), record.Name, record.TimeDuration); err != nil {
-				slog.Error("running_task_service, stopLocked:auto_recalculate_ramp", "err", err)
+		written := 0
+		for _, part := range parts {
+			rec := record
+			rec.TimeDuration = part.Minutes
+			rec.Date = part.Date
+			rec.SourceDay = task.SourceDay
+			if part.Kind != entity.SplitToday {
+				rec.SourceDay = part.Day
+			}
+			if err := s.st.AddTaskRecord(rec); err != nil {
+				if written == 0 {
+					return entity.TaskRecord{}, fmt.Errorf("failed to save task record: %w", err)
+				}
+				slog.Error("RunningTaskService: failed to save split record", "task", task.TaskName, "kind", part.Kind, "day", part.Day, "error", err)
+				continue
+			}
+			written++
+			if err := s.st.AddRoleMinutes(rec); err != nil {
+				slog.Error("RunningTaskService: failed to add role minutes", "task", task.TaskName, "error", err)
+			}
+			if part.Kind == entity.SplitToday && s.rampService != nil {
+				if err := s.rampService.AutoRecalculateOnRecord(context.Background(), rec.Name, rec.TimeDuration); err != nil {
+					slog.Error("running_task_service, stopLocked:auto_recalculate_ramp", "err", err)
+				}
+			}
+			switch part.Kind {
+			case entity.SplitDebt:
+				notes = append(notes, fmt.Sprintf("↪️ %s +%d мин", dayShortRu(part.Day), part.Minutes))
+				if s.debt != nil {
+					if closed, err := s.debt.DayClosed(part.Day); err == nil && closed {
+						closedDays = append(closedDays, entity.DayClosedEvent{Day: part.Day, Date: part.Date})
+						notes = append(notes, fmt.Sprintf("🎉 День закрыт ✅ — %s", dayFullRu(part.Day)))
+					}
+				}
+			case entity.SplitTomorrow:
+				notes = append(notes, fmt.Sprintf("⏭ Завтра +%d мин", part.Minutes))
 			}
 		}
+		record.Split = parts
 	}
 
 	if s.nt != nil && task.TelegramMessageID != 0 && duration == 0 {
@@ -401,7 +411,7 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 			}
 		}
 
-		if err := s.nt.SendMessageCompletion(task.TaskName, record.TimeDuration, todayDone, targetDuration, remainingTasksList, nextTask, task.TelegramMessageID, breakOptions); err != nil {
+		if err := s.nt.SendMessageCompletion(task.TaskName, record.TimeDuration, todayDone, targetDuration, remainingTasksList, nextTask, task.TelegramMessageID, breakOptions, notes); err != nil {
 			slog.Error("RunningTaskService: failed to send telegram completion message", "task", task.TaskName, "error", err)
 		}
 	}
@@ -422,6 +432,9 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 		Reason:   reason,
 		Data:     record,
 	})
+	for _, ev := range closedDays {
+		s.broadcastEvent(realtime.Event{Type: realtime.EventDayClosed, Data: ev})
+	}
 
 	return record, nil
 }

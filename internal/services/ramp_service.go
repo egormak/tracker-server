@@ -183,7 +183,7 @@ func (s *RampService) GetStatus(ctx context.Context) (entity.RampStatus, error) 
 	return ramp.ToStatus(focusMin), nil
 }
 
-// GetDurationForTask checks eligibility and returns current_step or default_rest_fallback.
+// GetDurationForTask checks eligibility and returns current_step or default_fallback_minutes.
 func (s *RampService) GetDurationForTask(ctx context.Context, taskName string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -204,7 +204,7 @@ func (s *RampService) GetDurationForTask(ctx context.Context, taskName string) (
 		return step, nil
 	}
 
-	fallback := ramp.DefaultRestFallback
+	fallback := ramp.DefaultFallbackMinutes
 	if fallback < 1 {
 		fallback = 15
 	}
@@ -285,8 +285,8 @@ func (s *RampService) UpdateConfig(ctx context.Context, cfg entity.RampConfig) (
 	if cfg.CapMinutes < 5 {
 		return entity.RampStatus{}, fmt.Errorf("cap_minutes must be at least 5")
 	}
-	if cfg.DefaultRestFallback < 1 {
-		return entity.RampStatus{}, fmt.Errorf("default_rest_fallback must be at least 1")
+	if cfg.DefaultFallbackMinutes < 1 {
+		return entity.RampStatus{}, fmt.Errorf("default_fallback_minutes must be at least 1")
 	}
 
 	s.mu.Lock()
@@ -317,7 +317,7 @@ func (s *RampService) UpdateConfig(ctx context.Context, cfg entity.RampConfig) (
 	if cfg.ExcludedTasks != nil {
 		ramp.ExcludedTasks = cfg.ExcludedTasks
 	}
-	ramp.DefaultRestFallback = cfg.DefaultRestFallback
+	ramp.DefaultFallbackMinutes = cfg.DefaultFallbackMinutes
 
 	if ramp.CurrentStep > ramp.CapMinutes {
 		ramp.CurrentStep = ramp.CapMinutes
@@ -347,7 +347,7 @@ func (s *RampService) UpdateConfig(ctx context.Context, cfg entity.RampConfig) (
 
 	slog.Info("Ramp configuration updated",
 		"cap_minutes", ramp.CapMinutes,
-		"default_rest_fallback", ramp.DefaultRestFallback,
+		"default_fallback_minutes", ramp.DefaultFallbackMinutes,
 	)
 	return ramp.ToStatus(focusMin), nil
 }

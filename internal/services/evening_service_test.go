@@ -1,6 +1,7 @@
 package services
 
 import (
+	"reflect"
 	"testing"
 	"time"
 	"tracker-server/internal/domain/entity"
@@ -27,19 +28,10 @@ func (m *mockStatStorage) GetRecordsForDates(dates []string) ([]entity.TaskRecor
 	return nil, nil
 }
 
-type mockRestProvider struct {
-	restUnits int
-}
-
-func (m *mockRestProvider) GetRest() (int, error) {
-	return m.restUnits, nil
-}
-
 func TestEveningServiceDailyReset(t *testing.T) {
 	mockStorage := &mockStatStorage{}
 	statSrv := NewStatisticService(mockStorage)
-	mockRest := &mockRestProvider{restUnits: 1500} // 1500 units = 15 min
-	eveningSrv := NewEveningService(statSrv, mockRest)
+	eveningSrv := NewEveningService(statSrv)
 
 	// Mock time starting on 2026-08-12
 	currentTime := time.Date(2026, 8, 12, 20, 0, 0, 0, time.UTC)
@@ -54,9 +46,6 @@ func TestEveningServiceDailyReset(t *testing.T) {
 	}
 	if res.CurrentTask.TaskName != "movies" {
 		t.Errorf("expected current task 'movies', got '%s'", res.CurrentTask.TaskName)
-	}
-	if res.RestPool != 15 {
-		t.Errorf("expected RestPool to be 15 min (from 1500 units), got %d", res.RestPool)
 	}
 
 	// 2. Skip 'movies' on Day 1
@@ -131,10 +120,13 @@ func (m *mockStatStorageWithRecords) GetRecordsForDates(dates []string) ([]entit
 	return m.records, nil
 }
 
-func TestEveningServiceLeastDonePriority(t *testing.T) {
+type fakeDebtToDate map[string]int
+
+func (f fakeDebtToDate) DebtToDate() (map[string]int, error) { return f, nil }
+
+func eveningRankingFixture() *EveningService {
 	now := time.Now()
-	weekday := now.Weekday()
-	daysSinceMonday := int(weekday) - 1
+	daysSinceMonday := int(now.Weekday()) - 1
 	if daysSinceMonday < 0 {
 		daysSinceMonday = 6
 	}
@@ -148,38 +140,46 @@ func TestEveningServiceLeastDonePriority(t *testing.T) {
 			{Name: "work", Role: "work", TimeDuration: 270, Date: mondayDate},
 		},
 	}
-	statSrv := NewStatisticService(mockStorage)
-	eveningSrv := NewEveningService(statSrv, nil)
+	return NewEveningService(NewStatisticService(mockStorage))
+}
+
+func candidateNames(cs []entity.EveningFocusCandidate) []string {
+	names := make([]string, len(cs))
+	for i, c := range cs {
+		names[i] = c.TaskName
+	}
+	return names
+}
+
+// The evening picks the task most behind to date: previous days' debt + today's remainder.
+func TestEveningServiceRanksByDebtToDate(t *testing.T) {
+	eveningSrv := eveningRankingFixture()
+	eveningSrv.SetDebtProvider(fakeDebtToDate{"video": 90, "telegram": 30, "movies": 30})
 
 	res, err := eveningSrv.GetEveningFocus("", 20)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if res.CurrentTask.TaskName != "video" || res.CurrentTask.DebtToDate != 90 {
+		t.Errorf("expected current task video with debt 90, got %+v", res.CurrentTask)
+	}
+	if res.CurrentTask.WeeklyDone != 127 || res.CurrentTask.WeeklyTarget != 245 || res.CurrentTask.WeeklyGap != 118 {
+		t.Errorf("unexpected weekly figures for video: %+v", res.CurrentTask)
+	}
+	// telegram and movies tie on debt; the larger weekly gap goes first (movies 238 > telegram 211).
+	if got, want := candidateNames(res.Candidates), []string{"video", "movies", "telegram"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("expected order %v (work and english excluded), got %v", want, got)
+	}
+}
 
-	// Telegram was done the least (4 min) -> should be candidate #1
-	if res.CurrentTask.TaskName != "telegram" {
-		t.Errorf("expected current task 'telegram', got '%s'", res.CurrentTask.TaskName)
+// Without debt the weekly gap decides.
+func TestEveningServiceRanksByWeeklyGapWithoutDebt(t *testing.T) {
+	res, err := eveningRankingFixture().GetEveningFocus("", 20)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if res.CurrentTask.WeeklyDone != 4 {
-		t.Errorf("expected current task weekly_done 4, got %d", res.CurrentTask.WeeklyDone)
-	}
-	if res.CurrentTask.WeeklyTarget != 215 {
-		t.Errorf("expected current task weekly_target 215, got %d", res.CurrentTask.WeeklyTarget)
-	}
-	if res.CurrentTask.WeeklyGap != 211 {
-		t.Errorf("expected current task weekly_gap 211, got %d", res.CurrentTask.WeeklyGap)
-	}
-
-	if len(res.Candidates) != 3 {
-		t.Fatalf("expected 3 candidates (excluding work and english), got %d", len(res.Candidates))
-	}
-
-	// Verify order: telegram (4m done) < movies (57m done) < video (127m done)
-	expectedOrder := []string{"telegram", "movies", "video"}
-	for i, exp := range expectedOrder {
-		if res.Candidates[i].TaskName != exp {
-			t.Errorf("candidate[%d]: expected '%s', got '%s'", i, exp, res.Candidates[i].TaskName)
-		}
+	if got, want := candidateNames(res.Candidates), []string{"movies", "telegram", "video"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("expected order %v, got %v", want, got)
 	}
 }
 
@@ -199,7 +199,7 @@ func TestEveningServiceBreakOptions(t *testing.T) {
 			{Name: "work", Role: "work", TimeDuration: 270, Date: mondayDate},
 		},
 	}
-	eveningSrv := NewEveningService(NewStatisticService(mockStorage), &mockRestProvider{})
+	eveningSrv := NewEveningService(NewStatisticService(mockStorage))
 
 	// A task snoozed in evening mode is still a valid break choice.
 	if err := eveningSrv.SkipTask("telegram"); err != nil {

@@ -13,7 +13,6 @@ type TaskRecordStorage interface {
 	GetRole(taskName string) (string, error)
 	AddTaskRecord(task entity.TaskRecord) error
 	AddRoleMinutes(task entity.TaskRecord) error
-	AddRest(restTime int) error
 	GetGroupPlanPercent() (int, error)
 	GetGroupPercent(groupPlanOrdinal int) (int, error)
 	CheckIfPlanPercentEmpty() error
@@ -217,12 +216,8 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 									// Update remaining time
 									remainingTime -= fillAmount
 
-									// Also add role minutes and rest for consistency?
-									// Usually yes, as it counts towards that day's stats
+									// Role minutes count towards that day's stats
 									s.st.AddRoleMinutes(pastRecord)
-									// Assuming rest is calculated daily or simply added to pool,
-									// if pool is global, we add it.
-									s.st.AddRest(fillAmount)
 								}
 							}
 						}
@@ -323,12 +318,6 @@ func (s *TaskRecordService) AddRecord(taskRecordRequest entity.TaskRecordRequest
 	if err := s.st.AddRoleMinutes(record); err != nil {
 		errMsg := fmt.Errorf("can't add role minutes: %s", err)
 		slog.Error("task_record_service, add_record:add_role_minutes", "err", errMsg)
-		return errMsg
-	}
-
-	if err := s.st.AddRest(record.TimeDuration); err != nil {
-		errMsg := fmt.Errorf("can't add rest: %s", err)
-		slog.Error("task_record_service, add_record:add_rest", "err", errMsg)
 		return errMsg
 	}
 

@@ -154,7 +154,7 @@ func (t *Telegram) SendMessageStop(taskName string, timeDone int, msgID int, tim
 	return nil
 }
 
-func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int, breakOptions []entity.BreakOption) error {
+func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int, breakOptions []entity.BreakOption, notes []string) error {
 	if t.Bot == nil {
 		return fmt.Errorf("telegram bot is not initialized")
 	}
@@ -186,6 +186,12 @@ func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDon
 		remainingLine = fmt.Sprintf("📋 Остаток по плану: %s", strings.Join(escaped, ", "))
 	}
 
+	// Notes say where the session went besides today (past days' debt, tomorrow) and
+	// which past days it closed.
+	for _, note := range notes {
+		todayLine += "\n" + html.EscapeString(note)
+	}
+
 	msgText := fmt.Sprintf("🎯 Задача <b>%s</b> (%d мин) завершена!\n%s\n%s",
 		html.EscapeString(taskName),
 		timeDone,
@@ -201,7 +207,6 @@ func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDon
 	}
 	rows = append(rows, breakSelectorRows(breakOptions)...)
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("☕️ Перерыв 10м", "t_rest:10"),
 		tgbotapi.NewInlineKeyboardButtonData("⏳ Продлить +15м", callbackData("t_extend", taskName, ":15")),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(

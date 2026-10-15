@@ -16,18 +16,18 @@
   - `api/middleware/` – `TelegramAuth` middleware. When `telegram.enable_webapp_auth` is true, validates requests against `X-Bot-Token` or HMAC-signed `X-Telegram-Init-Data` where the Telegram user ID equals `telegram.room_id`.
   - `realtime/` – WebSocket hub (`realtime.Hub`) handling client connections and broadcasting timer events (`GET /api/v1/timer/ws`).
   - `services/` – Business logic domain services:
-    - `running_task_service.go`: Live timer state machine (start, pause, resume, stop, adjust, heartbeat), single active running task enforced by mutex lock (`sync.Mutex`), WebSocket event emission, interactive Telegram notifications, and forward overtime credit.
+    - `running_task_service.go`: Live timer state machine (start, pause, resume, stop, adjust, heartbeat), single active running task enforced by mutex lock (`sync.Mutex`), WebSocket event emission, interactive Telegram notifications, and the stop-time split (`running_task_split.go`: debt share → today up to target → remaining own debt → tomorrow for strict tasks).
     - `schedule_service.go`: Weekly schedule CRUD, active schedule tracking, deficit/rollover calculation, `ApplyScheduleToday`, and thread-safe idempotent `EnsureTodaySchedule`.
     - `statistic_service.go`: Today's completion stats, weekly stats, tasklist. Injects `TodayScheduleEnsurer` (`ScheduleService`) to auto-apply today's schedule if the task list is empty.
-    - `taskrecord_service.go`: 3-step storage persistence (`AddTaskRecord` → `AddRoleMinutes` → `AddRest`) followed by best-effort `RampService.AutoRecalculateOnRecord`, backfill logic (`ManageByService` / `source_day`), and strict task overtime credit to tomorrow.
+    - `taskrecord_service.go`: 2-step storage persistence (`AddTaskRecord` → `AddRoleMinutes`) followed by best-effort `RampService.AutoRecalculateOnRecord`, backfill logic (`ManageByService` / `source_day`), and strict task overtime credit to tomorrow.
     - `ramp_service.go`: Focus warm-up step calculation $k = \min(\text{cap}, \lfloor(1+\sqrt{1+8S})/2\rfloor)$ from day's focus minutes, persisted in `"Ramp Info"` singleton, lazy reset on new day.
-    - `evening_service.go`: Catch-up task ranking by weekly deficit (excluding `work` and `english`), with in-memory thread-safe `snoozedTonight` set reset daily.
+    - `evening_service.go`: Catch-up task ranking by `debt_to_date` desc, then weekly gap, then name (excluding `work` and `english`), with in-memory thread-safe `snoozedTonight` set reset daily.
     - `day_roll_service.go`: Background worker (runs every 30s) calling `EnsureTodaySchedule` on server start and automatically when the calendar day changes.
     - `timer_watchdog.go`: Background worker (runs every 10s) enforcing target duration completion auto-stop, 20-minute safety cap for untargeted timers, and 3-minute heartbeat lease auto-pause.
-    - `rest_service.go`: Rest balance tracking in `"Rest Info"` singleton document.
+    - `debt_service.go`: Previous days' unfinished schedule this week, today's remainder and week strip (`GET /api/v1/debt`), built on `ScheduleService.GetRolloverTasks`; feeds the stop split and evening ranking.
     - `plan_percent.go`: Percent-weighted task group rotations.
     - `days.go`: Date manipulation helpers (`CalculateDateForDay`, `DayIndex`, `IsWeekendNow`, `FormatDate`).
-  - `storage/` + `storage/mongo/` – `Storage` interface contract (`internal/storage/storage.go`) and MongoDB implementation (`mongo/`). Collections: `task_info`, `tasks`, `task_list`, `role_info`, `weekly_schedules`. Special singletons: `"Rest Info"`, `"Procent Info"`, `"Ramp Info"`, `"Scheduler"`, `"Day List"`.
+  - `storage/` + `storage/mongo/` – `Storage` interface contract (`internal/storage/storage.go`) and MongoDB implementation (`mongo/`). Collections: `task_info`, `tasks`, `task_list`, `role_info`, `weekly_schedules`. Special singletons: `"Procent Info"`, `"Ramp Info"`, `"Scheduler"`, `"Day List"`.
   - `domain/entity/`, `models/`, `options/` – Typed domain models.
   - `notify/` + `notify/telegram/` – Notification interface (`SendMessageStart`, `SendMessageStop`, `SendMessageCompletion`, `SendCustomMessage`) with Telegram Bot API implementation supporting HTML formatting and inline action keyboards.
 - **Configuration**: `config/config.go` reads `./config.yaml` relative to CWD (see `config_example.yaml`).
@@ -58,7 +58,7 @@
 
 ## Testing Guidelines
 - Unit tests are located across `internal/services/`, `internal/api/handler/`, `internal/notify/telegram/`, `internal/domain/entity/`, and `internal/storage/mongo/`.
-- **No MongoDB required for unit tests**: Services and handlers are tested using pure hand-written mock structs satisfying narrow storage interfaces (e.g. `mockRampStorage`, `mockRestStorage`).
+- **No MongoDB required for unit tests**: Services and handlers are tested using pure hand-written mock structs satisfying narrow storage interfaces (e.g. `mockRampStorage`, `mockTaskStorage`).
 - Date-sensitive tests: Tests involving backfill or rollover calculation call `t.Skip` on Mondays since there are no earlier weekdays in the current week to backfill.
 - Run all tests before committing: `make test` (or `go test ./...`).
 - `test/main.go` is an ad-hoc manual script that requires MongoDB; it is not run by `go test`.
@@ -85,9 +85,10 @@
 
 ## Key Business Logic Rules
 - **Plan-Percent Auto-Rotation**: `GetTaskPlanPercent` automatically loops through and rotates to the next group when current percentage allocations are exhausted.
-- **Record Multi-Step Persistence**: Recording time via `TaskRecordService.AddRecord` runs `AddTaskRecord` → `AddRoleMinutes` → `AddRest` sequentially, followed by a best-effort `RampService.AutoRecalculateOnRecord`.
+- **Record Multi-Step Persistence**: Recording time via `TaskRecordService.AddRecord` runs `AddTaskRecord` → `AddRoleMinutes` sequentially, followed by a best-effort `RampService.AutoRecalculateOnRecord`.
 - **Source Day & Backfill**: When `ManageByService` is active and `source_day` is specified or implied, the service walks Monday through yesterday against the active schedule to backfill any deficit before applying remaining time to today.
-- **Dynamic Forward Overtime Credit**: For tasks marked `TimeStrictly: true`, time completed exceeding the scheduled daily target is credited to tomorrow as a separate task record.
+- **Dynamic Forward Overtime Credit**: For tasks marked `TimeStrictly: true`, time completed exceeding the scheduled daily target (and not absorbed by the task's own past debt) is credited to tomorrow as a separate task record.
+- **Debt and Split on Stop**: `POST /timer/run/start` takes `debt_share` (0–100, stored on a new start only) and origin `batch`. Stopping a non-`source_day` session of ≥30s splits it: share % → own past debt oldest day first (unused returns), rest → today up to target, excess → remaining own debt, leftover → tomorrow (strict) or today. One record per destination; the returned record has the whole session in `time_duration` plus `split[]`. A fully closed past day emits `DAY_CLOSED` and adds notes to the completion card.
 - **Running Task Mutex & Single Active Timer**: `RunningTaskService` serializes all timer modifications with `sync.Mutex`. Starting or resuming a task automatically pauses any currently running task.
 - **Timer Watchdog**: Runs every 10 seconds:
   1. Auto-stops running tasks when `TargetDuration` is reached.
@@ -95,8 +96,8 @@
   3. Auto-pauses running tasks if clients stop sending heartbeats for longer than 3 minutes (`LastHeartbeatAt`).
 - **Day-Roll Worker & Schedule Auto-Apply**: Runs every 30 seconds. On application startup or when crossing the midnight date boundary, `EnsureTodaySchedule()` idempotently applies today's schedule from the active weekly schedule if tasks have not yet been populated.
 - **Ramp Warm-up Progression**: Daily focus warm-up steps are calculated as $k = \min(\text{cap}, \lfloor(1+\sqrt{1+8S})/2\rfloor)$ from cumulative focus minutes $S$, resetting lazily on the first read of a new calendar day.
-- **Evening Catch-up Mode**: Suggests tasks ordered by weekly deficit, excluding `work` and `english`, with in-memory snoozing cleared daily.
-- **Realtime WebSocket Hub**: `RunningTaskService` broadcasts timer lifecycle events (`TASK_STARTED`, `TASK_PAUSED`, `TASK_STOPPED`, `STATE_SYNC`, etc.) to connected clients via `GET /api/v1/timer/ws`.
+- **Evening Catch-up Mode**: Suggests tasks ordered by debt to date (previous days' debt + today's remainder), then weekly gap, excluding `work` and `english`, with in-memory snoozing cleared daily.
+- **Realtime WebSocket Hub**: `RunningTaskService` broadcasts timer lifecycle events (`TASK_STARTED`, `TASK_PAUSED`, `TASK_STOPPED`, `STATE_SYNC`, `DAY_CLOSED`, etc.) to connected clients via `GET /api/v1/timer/ws`.
 
 ## API Highlights
 Refer to `openapi.yml` for the complete OpenAPI 3.0 specification.
@@ -125,8 +126,9 @@ Refer to `openapi.yml` for the complete OpenAPI 3.0 specification.
 - **Evening Focus Mode**:
   - `GET /api/v1/mode/evening-focus` – Get prioritized catch-up task
   - `POST /api/v1/mode/evening-focus/skip` – Temporarily snooze task for tonight
-- **Rest & Plan Percents**:
-  - `GET /api/v1/rest/get`, `POST /api/v1/rest/add`, `POST /api/v1/rest/spend`, `POST /api/v1/rest/reset`
+- **Debt**:
+  - `GET /api/v1/debt` – Previous days' debt, today's remainder, week strip
+- **Plan Percents**:
   - `GET /api/v1/manage/plan-percents`, `DELETE /api/v1/manage/plan-percents/:group/:value`
 - **Statistics**:
   - `GET /api/v1/stats/done/today`, `GET /api/v1/stats/tasks/today`, `GET /api/v1/stats/weekly`

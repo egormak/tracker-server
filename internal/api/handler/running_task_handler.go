@@ -28,9 +28,13 @@ func (h *RunningTaskHandler) Start(c *fiber.Ctx) error {
 		TargetDuration int    `json:"target_duration"`
 		SourceDay      string `json:"source_day"`
 		Origin         string `json:"origin"`
+		DebtShare      int    `json:"debt_share"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return c.Status(400).JSON(fiber.Map{"status": "error", "message": err.Error()})
+	}
+	if body.DebtShare < 0 || body.DebtShare > 100 {
+		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "debt_share must be between 0 and 100"})
 	}
 
 	slog.Info("RunningTaskHandler.Start", "task", body.TaskName, "role", body.Role, "target_duration", body.TargetDuration, "source_day", body.SourceDay)
@@ -42,6 +46,7 @@ func (h *RunningTaskHandler) Start(c *fiber.Ctx) error {
 		SourceDay:      body.SourceDay,
 		Client:         middleware.Client(c),
 		Origin:         body.Origin,
+		DebtShare:      body.DebtShare,
 	})
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})

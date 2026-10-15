@@ -23,9 +23,6 @@ func (m *MockTaskRecordStorage) AddTaskRecord(task entity.TaskRecord) error {
 func (m *MockTaskRecordStorage) AddRoleMinutes(task entity.TaskRecord) error {
 	return nil
 }
-func (m *MockTaskRecordStorage) AddRest(restTime int) error {
-	return nil
-}
 func (m *MockTaskRecordStorage) GetGroupPlanPercent() (int, error) {
 	return 0, nil
 }

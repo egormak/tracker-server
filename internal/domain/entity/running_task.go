@@ -15,4 +15,5 @@ type RunningTask struct {
 	DeadlineAt        time.Time `bson:"deadline_at,omitempty" json:"deadline_at,omitempty"`
 	TelegramMessageID int       `bson:"telegram_message_id,omitempty" json:"telegram_message_id,omitempty"`
 	SourceDevice      string    `bson:"source_device,omitempty" json:"source_device,omitempty"` // client that started the task
+	DebtShare         int       `bson:"debt_share,omitempty" json:"debt_share,omitempty"`       // % of the session sent to the task's past debt on stop
 }

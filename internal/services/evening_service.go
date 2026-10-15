@@ -9,26 +9,33 @@ import (
 	"tracker-server/internal/domain/entity"
 )
 
-type RestProvider interface {
-	GetRest() (int, error)
+// DebtToDateProvider gives, per lowercased task name, the previous days' debt plus today's remainder.
+type DebtToDateProvider interface {
+	DebtToDate() (map[string]int, error)
 }
 
 type EveningService struct {
+	debt           DebtToDateProvider
 	statSrv        *StatisticService
-	restSrv        RestProvider
 	snoozedTonight map[string]bool
 	lastResetDate  string
 	nowFunc        func() time.Time
 	mu             sync.Mutex
 }
 
-func NewEveningService(statSrv *StatisticService, restSrv RestProvider) *EveningService {
+func NewEveningService(statSrv *StatisticService) *EveningService {
 	return &EveningService{
 		statSrv:        statSrv,
-		restSrv:        restSrv,
 		snoozedTonight: make(map[string]bool),
 		nowFunc:        time.Now,
 	}
+}
+
+// SetDebtProvider ranks the evening candidates by debt to date.
+func (s *EveningService) SetDebtProvider(p DebtToDateProvider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.debt = p
 }
 
 func (s *EveningService) checkDailyResetLocked() {
@@ -59,9 +66,17 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 	}
 	s.mu.Unlock()
 
+	debtToDate := map[string]int{}
+	if s.debt != nil {
+		if d, err := s.debt.DebtToDate(); err != nil {
+			slog.Warn("Failed to get debt to date for evening focus", "err", err)
+		} else {
+			debtToDate = d
+		}
+	}
+
 	type item struct {
 		candidate entity.EveningFocusCandidate
-		timeDone  int
 	}
 
 	var items []item
@@ -93,18 +108,22 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 				WeeklyGap:    gap,
 				Priority:     5,
 				IsStrict:     false,
+				DebtToDate:   debtToDate[lowerName],
 			},
-			timeDone: taskTarget.TimeDone,
 		})
 	}
 
-	// Sort candidates by least time done for the week (ascending)
-	// Tie-break by highest remaining weekly deficit (WeeklyGap) descending
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].timeDone != items[j].timeDone {
-			return items[i].timeDone < items[j].timeDone
+	// Most behind to date first (previous days' debt + today's remainder); ties by the
+	// larger weekly gap, then by name for a stable order.
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := items[i].candidate, items[j].candidate
+		if a.DebtToDate != b.DebtToDate {
+			return a.DebtToDate > b.DebtToDate
 		}
-		return items[i].candidate.WeeklyGap > items[j].candidate.WeeklyGap
+		if a.WeeklyGap != b.WeeklyGap {
+			return a.WeeklyGap > b.WeeklyGap
+		}
+		return a.TaskName < b.TaskName
 	})
 
 	candidates := make([]entity.EveningFocusCandidate, len(items))
@@ -122,19 +141,10 @@ func (s *EveningService) GetEveningFocus(category string, timeOverride int) (ent
 		currentTask = candidates[0]
 	}
 
-	restUnits := 0
-	if s.restSrv != nil {
-		if r, err := s.restSrv.GetRest(); err == nil {
-			restUnits = r
-		}
-	}
-	restPoolMin := restUnits / 100
-
 	return entity.EveningFocusResponse{
 		CurrentTask: currentTask,
 		Candidates:  candidates,
 		SprintTime:  sprintTime,
-		RestPool:    restPoolMin,
 	}, nil
 }
 
