@@ -130,6 +130,10 @@ func TestRunningTaskService_SeamlessSwitching(t *testing.T) {
 	if !taskA.IsRunning || taskA.TaskName != "work" {
 		t.Fatalf("expected task A to be running, got %+v", taskA)
 	}
+	// Task A has run for a minute, long enough to leave a record when it is auto-stopped.
+	runA := storage.tasks["work"]
+	runA.StartTime = time.Now().Add(-time.Minute)
+	storage.tasks["work"] = runA
 
 	// 2. Seamlessly start task B ("english") while task A is running
 	taskB, err := service.Start("english", "learn", 20, "")
@@ -199,6 +203,10 @@ func TestRunningTaskService_SeamlessSwitching_AutoStopFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to start task A: %v", err)
 	}
+	// Task A has run for a minute, long enough to leave a record when it is auto-stopped.
+	runA := storage.tasks["work"]
+	runA.StartTime = time.Now().Add(-time.Minute)
+	storage.tasks["work"] = runA
 
 	// 2. Inject failure when auto-stopping task A
 	storage.addTaskRecordErr = errors.New("database write failure during stop")
@@ -222,6 +230,7 @@ type mockRunningTaskNotify struct {
 	startCalls      []string
 	stopCalls       []string
 	completionCalls []completionCall
+	deletedMessages []int
 }
 
 type completionCall struct {
@@ -260,6 +269,11 @@ func (m *mockRunningTaskNotify) SendMessageCompletion(taskName string, timeDone 
 }
 
 func (m *mockRunningTaskNotify) SendCustomMessage(message string) error {
+	return nil
+}
+
+func (m *mockRunningTaskNotify) DeleteMessage(msgID int) error {
+	m.deletedMessages = append(m.deletedMessages, msgID)
 	return nil
 }
 
@@ -348,6 +362,131 @@ func TestRunningTaskService_Stop_TelegramPushCompletion(t *testing.T) {
 	}
 	if call.MsgID != 101 {
 		t.Errorf("expected MsgID 101, got %d", call.MsgID)
+	}
+}
+
+// The card's "today" line compares the whole day's minutes, so its target must be the
+// task's day target from the schedule, not the 30-minute length of the run that ended.
+func TestRunningTaskService_Stop_TelegramTargetIsDayTargetNotRunLength(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+
+	todayDay := strings.ToLower(time.Now().Weekday().String())
+	var sched entity.WeeklySchedule
+	setDaySchedule(&sched, todayDay, entity.DaySchedule{
+		Day:   todayDay,
+		Tasks: []entity.ScheduleTask{{Name: "work", Time: 300}},
+	})
+	storage.activeSchedule = sched
+	storage.todayDurations["work"] = 99
+
+	storage.tasks["work"] = entity.RunningTask{
+		TaskName:          "work",
+		Role:              "work",
+		StartTime:         time.Now().Add(-1 * time.Minute),
+		IsRunning:         true,
+		TargetDuration:    30,
+		TelegramMessageID: 7,
+	}
+
+	if _, err := service.Stop("work", "manual"); err != nil {
+		t.Fatalf("unexpected error stopping task: %v", err)
+	}
+	if len(nt.completionCalls) != 1 {
+		t.Fatalf("expected 1 completion call, got %d", len(nt.completionCalls))
+	}
+	call := nt.completionCalls[0]
+	if call.TodayDone != 99 {
+		t.Errorf("expected TodayDone 99, got %d", call.TodayDone)
+	}
+	if call.TargetDuration != 300 {
+		t.Errorf("expected TargetDuration 300 (day target), got %d", call.TargetDuration)
+	}
+}
+
+// Without a schedule entry the run length still must not become the day target.
+func TestRunningTaskService_Stop_TelegramTargetWithoutScheduleIgnoresRunLength(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+
+	storage.todayDurations["misc"] = 40
+	storage.tasks["misc"] = entity.RunningTask{
+		TaskName:          "misc",
+		Role:              "rest",
+		StartTime:         time.Now().Add(-10 * time.Minute),
+		IsRunning:         true,
+		TargetDuration:    30,
+		TelegramMessageID: 8,
+	}
+
+	if _, err := service.Stop("misc", "manual"); err != nil {
+		t.Fatalf("unexpected error stopping task: %v", err)
+	}
+	if len(nt.completionCalls) != 1 {
+		t.Fatalf("expected 1 completion call, got %d", len(nt.completionCalls))
+	}
+	if got := nt.completionCalls[0].TargetDuration; got == 30 {
+		t.Errorf("expected the run length not to be used as the day target, got %d", got)
+	}
+}
+
+// A stop right after a start (a key that also reached the next timer) leaves no record:
+// no 1-minute entry, no completion card, and the start card is removed.
+func TestRunningTaskService_Stop_MisStartLeavesNoRecord(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+
+	storage.tasks["work"] = entity.RunningTask{
+		TaskName:          "work",
+		Role:              "work",
+		StartTime:         time.Now().Add(-200 * time.Millisecond),
+		IsRunning:         true,
+		TargetDuration:    30,
+		TelegramMessageID: 9,
+	}
+
+	record, err := service.Stop("work", "manual")
+	if err != nil {
+		t.Fatalf("unexpected error stopping task: %v", err)
+	}
+	if record.TimeDuration != 0 {
+		t.Errorf("expected TimeDuration 0, got %d", record.TimeDuration)
+	}
+	if len(storage.records) != 0 {
+		t.Errorf("expected no task record, got %v", storage.records)
+	}
+	if len(nt.completionCalls) != 0 {
+		t.Errorf("expected no completion card, got %d", len(nt.completionCalls))
+	}
+	if !reflect.DeepEqual(nt.deletedMessages, []int{9}) {
+		t.Errorf("expected start card 9 deleted, got %v", nt.deletedMessages)
+	}
+	if _, ok := storage.tasks["work"]; ok {
+		t.Errorf("expected running task cleared")
+	}
+}
+
+// A started minute still counts once the run passes minRecordedRun.
+func TestRunningTaskService_Stop_ShortRunCountsAsOneMinute(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	service := NewRunningTaskService(storage, nil)
+
+	storage.tasks["work"] = entity.RunningTask{
+		TaskName:  "work",
+		Role:      "work",
+		StartTime: time.Now().Add(-40 * time.Second),
+		IsRunning: true,
+	}
+
+	record, err := service.Stop("work", "manual")
+	if err != nil {
+		t.Fatalf("unexpected error stopping task: %v", err)
+	}
+	if record.TimeDuration != 1 || len(storage.records) != 1 {
+		t.Errorf("expected one 1-minute record, got duration %d, records %v", record.TimeDuration, storage.records)
 	}
 }
 

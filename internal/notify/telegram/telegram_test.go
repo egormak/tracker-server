@@ -242,15 +242,18 @@ func TestSendMessageCompletion_ZeroTargetDuration(t *testing.T) {
 	})
 	defer server.Close()
 
-	// targetDuration == 0 should not panic (division by zero)
+	// targetDuration == 0 should not panic (division by zero) and shows no percent
 	err := tg.SendMessageCompletion("misc", 15, 15, 0, nil, "", 0, nil)
 	if err != nil {
 		t.Fatalf("SendMessageCompletion failed: %v", err)
 	}
 
-	expectedLine := "📊 Сегодня: 15 / 0 мин (0% выполнено)"
+	expectedLine := "📊 Сегодня: 15 мин\n"
 	if !strings.Contains(capturedSendBody, expectedLine) {
 		t.Errorf("expected message to contain %q, got: %s", expectedLine, capturedSendBody)
+	}
+	if strings.Contains(capturedSendBody, "выполнено") {
+		t.Errorf("expected no percent without a target, got: %s", capturedSendBody)
 	}
 }
 

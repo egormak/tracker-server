@@ -81,6 +81,10 @@ func (n *mockTaskNotify) SendCustomMessage(message string) error {
 	return nil
 }
 
+func (n *mockTaskNotify) DeleteMessage(msgID int) error {
+	return nil
+}
+
 func setDaySchedule(sched *entity.WeeklySchedule, day string, ds entity.DaySchedule) {
 	switch strings.ToLower(day) {
 	case "monday":

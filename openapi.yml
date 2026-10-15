@@ -1662,7 +1662,7 @@ paths:
       tags:
         - RunningTimer
       summary: Stop a running task timer
-      description: Stops the running task, records duration to database, adds rest time and forward overtime credit if strict.
+      description: Stops the running task, records duration to database, adds rest time and forward overtime credit if strict. A started minute counts as one, but a run shorter than 30 seconds is a mis-start and is not recorded (`time_duration` 0, its Telegram start card is deleted).
       operationId: stopRunningTask
       requestBody:
         content:

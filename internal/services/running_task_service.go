@@ -34,6 +34,9 @@ type BreakOptionsProvider interface {
 	GetBreakOptions() (entity.BreakOptionsResponse, error)
 }
 
+// minRecordedRun is the shortest stopped run that becomes a task record.
+const minRecordedRun = 30 * time.Second
+
 type RunningTaskService struct {
 	st           RunningTaskStorage
 	nt           notify.Notify
@@ -233,12 +236,15 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 	}
 
 	// Calculate total duration
-	duration := task.Accumulated
+	elapsed := time.Duration(task.Accumulated) * time.Minute
 	if task.IsRunning {
-		duration += int(time.Since(task.StartTime).Minutes())
+		elapsed += time.Since(task.StartTime)
 	}
+	duration := int(elapsed.Minutes())
 
-	if duration == 0 && task.IsRunning {
+	// A started minute counts as one, but a run shorter than minRecordedRun is a
+	// mis-start (e.g. a stop key that also reached the next timer) and leaves no record.
+	if duration == 0 && task.IsRunning && elapsed >= minRecordedRun {
 		duration = 1
 	}
 
@@ -314,7 +320,12 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 		}
 	}
 
-	if s.nt != nil && task.TelegramMessageID != 0 {
+	if s.nt != nil && task.TelegramMessageID != 0 && duration == 0 {
+		// Nothing was recorded: drop the start card instead of reporting a 0-minute task.
+		if err := s.nt.DeleteMessage(task.TelegramMessageID); err != nil {
+			slog.Warn("RunningTaskService: failed to delete start card", "task", task.TaskName, "error", err)
+		}
+	} else if s.nt != nil && task.TelegramMessageID != 0 {
 		// A backfilled session (SourceDay set) is recorded against that day, so its
 		// progress and target must come from that day rather than today.
 		todayDone := record.TimeDuration
@@ -326,12 +337,10 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 			todayDone = td
 		}
 
-		targetDuration := task.TargetDuration
-		if targetDuration == 0 {
-			if params, err := s.st.GetTaskParams(task.TaskName); err == nil && params.Time > 0 {
-				targetDuration = params.Time
-			}
-		}
+		// todayDone covers the whole day for this task, so the target is the task's day
+		// target: the schedule (below), else its params time. Never task.TargetDuration —
+		// that is the length of this one timer run.
+		targetDuration := 0
 
 		var remainingTasksList []string
 		var nextTask string
@@ -344,12 +353,10 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 			if task.SourceDay != "" {
 				targetSchedule = getDayScheduleFromWeekly(sched, strings.ToLower(task.SourceDay))
 			}
-			if targetDuration == 0 {
-				for _, st := range targetSchedule.Tasks {
-					if strings.EqualFold(st.Name, task.TaskName) && st.Time > 0 {
-						targetDuration = st.Time
-						break
-					}
+			for _, st := range targetSchedule.Tasks {
+				if strings.EqualFold(st.Name, task.TaskName) && st.Time > 0 {
+					targetDuration = st.Time
+					break
 				}
 			}
 
@@ -376,6 +383,11 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 
 			if len(remainingTasksList) > 0 {
 				nextTask = remainingTasksList[0]
+			}
+		}
+		if targetDuration == 0 {
+			if params, err := s.st.GetTaskParams(task.TaskName); err == nil && params.Time > 0 {
+				targetDuration = params.Time
 			}
 		}
 

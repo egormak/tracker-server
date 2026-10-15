@@ -7,4 +7,6 @@ type Notify interface {
 	SendMessageStop(taskName string, timeDone int, msgID int, timeEnd string) error
 	SendMessageCompletion(taskName string, timeDone int, todayDone int, targetDuration int, remainingTasks []string, nextTask string, msgID int, breakOptions []entity.BreakOption) error
 	SendCustomMessage(message string) error
+	// DeleteMessage removes a card, e.g. the start card of a run too short to record.
+	DeleteMessage(msgID int) error
 }

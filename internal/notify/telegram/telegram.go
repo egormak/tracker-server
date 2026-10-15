@@ -166,17 +166,16 @@ func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDon
 		}
 	}
 
-	percent := 0
+	// targetDuration is the task's day target; without one there is nothing to take a percent of.
+	todayLine := fmt.Sprintf("📊 Сегодня: %d мин", todayDone)
 	if targetDuration > 0 {
-		percent = (todayDone * 100) / targetDuration
+		percent := (todayDone * 100) / targetDuration
+		checkMark := ""
+		if percent >= 100 {
+			checkMark = " ✅"
+		}
+		todayLine = fmt.Sprintf("📊 Сегодня: %d / %d мин (%d%% выполнено%s)", todayDone, targetDuration, percent, checkMark)
 	}
-
-	checkMark := ""
-	if percent >= 100 {
-		checkMark = " ✅"
-	}
-
-	todayLine := fmt.Sprintf("📊 Сегодня: %d / %d мин (%d%% выполнено%s)", todayDone, targetDuration, percent, checkMark)
 
 	remainingLine := "📋 Остаток по плану: Все задачи на сегодня выполнены! 🎉"
 	if len(remainingTasks) > 0 {
@@ -225,6 +224,14 @@ func (t *Telegram) SendMessageCompletion(taskName string, timeDone int, todayDon
 	}
 
 	return nil
+}
+
+func (t *Telegram) DeleteMessage(msgID int) error {
+	if t.Bot == nil {
+		return fmt.Errorf("telegram bot is not initialized")
+	}
+	_, err := t.Bot.Request(tgbotapi.NewDeleteMessage(t.RoomID, msgID))
+	return err
 }
 
 func (t *Telegram) SendCustomMessage(message string) error {
