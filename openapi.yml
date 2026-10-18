@@ -1754,7 +1754,12 @@ paths:
       tags:
         - RunningTimer
       summary: Client heartbeat ping
-      description: Updates the last heartbeat timestamp for the active running task to prevent lease timeout.
+      description: >-
+        Updates the last heartbeat timestamp for the active running task. A run started or resumed
+        by a client with an open timer is paused when no heartbeat arrives for 3 minutes. A run whose
+        `run_client` is `bot`, `mcp` or `miniapp` is not held to this lease: it still stops at its
+        target (or at the 20-minute cap of a free timer), and while no heartbeat arrives the server
+        sends a Telegram "still running" card with pause/stop buttons every 5 minutes.
       operationId: sendTimerHeartbeat
       requestBody:
         content:
@@ -2889,6 +2894,18 @@ components:
         source_device:
           type: string
           description: Client that started the task (`X-Tracker-Client`); copied to the task record on stop
+        run_client:
+          type: string
+          description: >-
+            Client that started or last resumed the run. `bot`, `mcp` and `miniapp` runs are not
+            paused on a missed heartbeat and get a Telegram reminder every 5 minutes instead.
+        reminder_at:
+          type: string
+          format: date-time
+          description: When the last "still running" reminder was sent
+        reminder_message_id:
+          type: integer
+          description: Telegram message of the latest reminder; deleted on stop
       required:
         - task_name
         - role

@@ -222,3 +222,140 @@ func TestRunningTaskService_Heartbeat(t *testing.T) {
 		t.Errorf("Expected LastHeartbeatAt to be updated, got %v <= %v", updated.LastHeartbeatAt, firstHb)
 	}
 }
+
+func TestTimerWatchdog_HeartbeatFreeClientIsNotPaused(t *testing.T) {
+	for _, client := range []string{"bot", "mcp", "miniapp"} {
+		storage := NewMockRunningTaskStorage()
+		nt := &mockRunningTaskNotify{}
+		watchdog := NewTimerWatchdog(NewRunningTaskService(storage, nt))
+
+		// Started 4 minutes ago from a client that never sends heartbeats.
+		storage.tasks["telegram"] = entity.RunningTask{
+			TaskName:        "telegram",
+			Role:            "rest",
+			StartTime:       time.Now().Add(-4 * time.Minute),
+			LastHeartbeatAt: time.Now().Add(-4 * time.Minute),
+			IsRunning:       true,
+			TargetDuration:  60,
+			RunClient:       client,
+		}
+
+		watchdog.checkRunningTasks()
+
+		if !storage.tasks["telegram"].IsRunning {
+			t.Errorf("%s: expected the run to keep going without heartbeats, it was paused", client)
+		}
+		if len(nt.reminderCalls) != 0 {
+			t.Errorf("%s: expected no reminder before %v, got %d", client, RunningReminderInterval, len(nt.reminderCalls))
+		}
+	}
+}
+
+func TestTimerWatchdog_HeartbeatFreeClientGetsReminders(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+	watchdog := NewTimerWatchdog(service)
+
+	start := time.Now().Add(-6 * time.Minute)
+	storage.tasks["telegram"] = entity.RunningTask{
+		TaskName:        "telegram",
+		Role:            "rest",
+		StartTime:       start,
+		LastHeartbeatAt: start,
+		IsRunning:       true,
+		TargetDuration:  60,
+		Accumulated:     2,
+		RunClient:       "bot",
+	}
+
+	watchdog.checkRunningTasks()
+	if len(nt.reminderCalls) != 1 {
+		t.Fatalf("expected 1 reminder after 6 min, got %d", len(nt.reminderCalls))
+	}
+	if got := nt.reminderCalls[0]; got.TaskName != "telegram" || got.Elapsed != 8 || got.Target != 60 || got.PrevMsgID != 0 {
+		t.Errorf("unexpected first reminder: %+v", got)
+	}
+
+	// The next watchdog tick is inside the interval: no second card.
+	watchdog.checkRunningTasks()
+	if len(nt.reminderCalls) != 1 {
+		t.Fatalf("expected no repeat inside the interval, got %d reminders", len(nt.reminderCalls))
+	}
+
+	// Five minutes later the next card replaces the previous one.
+	later := time.Now().Add(RunningReminderInterval + time.Second)
+	if !service.RemindIfDue("telegram", later) {
+		t.Fatal("expected a second reminder after the interval")
+	}
+	if got := nt.reminderCalls[1]; got.PrevMsgID != 101 {
+		t.Errorf("expected the second reminder to replace card 101, got %+v", got)
+	}
+
+	// Stopping the run removes the last reminder card.
+	if _, err := service.Stop("telegram"); err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+	found := false
+	for _, id := range nt.deletedMessages {
+		if id == 102 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected reminder card 102 to be deleted on stop, deleted: %v", nt.deletedMessages)
+	}
+}
+
+func TestRunningTaskService_RemindIfDue_SilentWhileHeartbeating(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	nt := &mockRunningTaskNotify{}
+	service := NewRunningTaskService(storage, nt)
+
+	// Started from the bot, but an open CLI/web timer is sending heartbeats.
+	storage.tasks["telegram"] = entity.RunningTask{
+		TaskName:        "telegram",
+		StartTime:       time.Now().Add(-10 * time.Minute),
+		LastHeartbeatAt: time.Now(),
+		IsRunning:       true,
+		RunClient:       "bot",
+	}
+	if service.RemindIfDue("telegram", time.Now()) {
+		t.Error("expected no reminder while heartbeats arrive")
+	}
+
+	// A lease-held client (cli) never gets reminders: the lease pauses it instead.
+	storage.tasks["telegram"] = entity.RunningTask{
+		TaskName:        "telegram",
+		StartTime:       time.Now().Add(-10 * time.Minute),
+		LastHeartbeatAt: time.Now().Add(-10 * time.Minute),
+		IsRunning:       true,
+		RunClient:       "cli",
+	}
+	if service.RemindIfDue("telegram", time.Now()) {
+		t.Error("expected no reminder for a cli run")
+	}
+}
+
+func TestRunningTaskService_RunClientFollowsStartAndResume(t *testing.T) {
+	storage := NewMockRunningTaskStorage()
+	service := NewRunningTaskService(storage, nil)
+
+	task, err := service.StartWith(StartOptions{TaskName: "telegram", Role: "rest", TargetDuration: 30, Client: "bot"})
+	if err != nil {
+		t.Fatalf("StartWith failed: %v", err)
+	}
+	if task.RunClient != "bot" {
+		t.Errorf("expected run_client bot after start, got %q", task.RunClient)
+	}
+	if _, err := service.Pause("telegram"); err != nil {
+		t.Fatalf("Pause failed: %v", err)
+	}
+	task, err = service.Resume("telegram", "cli")
+	if err != nil {
+		t.Fatalf("Resume failed: %v", err)
+	}
+	if task.RunClient != "cli" || task.SourceDevice != "bot" {
+		t.Errorf("expected run_client cli and source_device bot after a cli resume, got %q / %q", task.RunClient, task.SourceDevice)
+	}
+}

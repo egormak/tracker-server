@@ -239,6 +239,36 @@ func (t *Telegram) DeleteMessage(msgID int) error {
 	return err
 }
 
+func (t *Telegram) SendMessageReminder(taskName string, elapsedMin int, targetMin int, prevMsgID int) (int, error) {
+	if t.Bot == nil {
+		return 0, fmt.Errorf("telegram bot is not initialized")
+	}
+
+	progress := fmt.Sprintf("🕜 %d мин", elapsedMin)
+	if targetMin > 0 {
+		progress = fmt.Sprintf("🕜 %d из %d мин", elapsedMin, targetMin)
+	}
+	msg := tgbotapi.NewMessage(t.RoomID, fmt.Sprintf("⏳ Задача идёт: <b>%s</b>\n%s\nНе забудь остановить, если закончил.", html.EscapeString(taskName), progress))
+	msg.ParseMode = "HTML"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("⏸ Пауза", callbackData("t_pause", taskName, "")),
+			tgbotapi.NewInlineKeyboardButtonData("⏹ Стоп", callbackData("t_stop", taskName, "")),
+		),
+	)
+
+	ack, err := t.Bot.Send(msg)
+	if err != nil {
+		slog.Error("SendMessageReminder: failed to send message", "error", err)
+		return 0, err
+	}
+	// Only the latest reminder stays in the chat.
+	if prevMsgID != 0 {
+		_, _ = t.Bot.Request(tgbotapi.NewDeleteMessage(t.RoomID, prevMsgID))
+	}
+	return ack.MessageID, nil
+}
+
 func (t *Telegram) SendCustomMessage(message string) error {
 	if t.Bot == nil {
 		return fmt.Errorf("telegram bot is not initialized")

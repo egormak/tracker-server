@@ -98,7 +98,14 @@ func (w *TimerWatchdog) checkRunningTasks() {
 			continue
 		}
 
-		// Rule 3: Heartbeat Lease Timeout
+		// Rule 3: a run from a client without an open timer (bot, mcp, miniapp) is not held to
+		// the lease; it gets a Telegram reminder every RunningReminderInterval instead.
+		if HeartbeatExempt(task.RunClient) {
+			w.runningService.RemindIfDue(task.TaskName, now)
+			continue
+		}
+
+		// Rule 4: Heartbeat Lease Timeout
 		if !task.LastHeartbeatAt.IsZero() && now.Sub(task.LastHeartbeatAt) > w.leaseTimeout {
 			slog.Warn("TimerWatchdog: heartbeat lease expired, pausing task",
 				"task", task.TaskName,

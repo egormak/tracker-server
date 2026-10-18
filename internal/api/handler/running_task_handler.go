@@ -109,7 +109,7 @@ func (h *RunningTaskHandler) Resume(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&body)
 
-	task, err := h.service.Resume(body.TaskName)
+	task, err := h.service.Resume(body.TaskName, middleware.Client(c))
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": err.Error()})
 	}

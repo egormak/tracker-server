@@ -231,6 +231,14 @@ type mockRunningTaskNotify struct {
 	stopCalls       []string
 	completionCalls []completionCall
 	deletedMessages []int
+	reminderCalls   []reminderCall
+}
+
+type reminderCall struct {
+	TaskName  string
+	Elapsed   int
+	Target    int
+	PrevMsgID int
 }
 
 type completionCall struct {
@@ -277,6 +285,11 @@ func (m *mockRunningTaskNotify) SendCustomMessage(message string) error {
 func (m *mockRunningTaskNotify) DeleteMessage(msgID int) error {
 	m.deletedMessages = append(m.deletedMessages, msgID)
 	return nil
+}
+
+func (m *mockRunningTaskNotify) SendMessageReminder(taskName string, elapsedMin int, targetMin int, prevMsgID int) (int, error) {
+	m.reminderCalls = append(m.reminderCalls, reminderCall{taskName, elapsedMin, targetMin, prevMsgID})
+	return 100 + len(m.reminderCalls), nil
 }
 
 func TestRunningTaskService_Start_AttachesTelegramMessageID(t *testing.T) {

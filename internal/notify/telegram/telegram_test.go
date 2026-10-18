@@ -422,3 +422,41 @@ func TestSendMessageCompletion_Notes(t *testing.T) {
 		}
 	}
 }
+
+func TestSendMessageReminder(t *testing.T) {
+	var paths, bodies []string
+
+	tg, server := newTestTelegram(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		bodyBytes, _ := io.ReadAll(r.Body)
+		body, _ := url.QueryUnescape(string(bodyBytes))
+		bodies = append(bodies, body)
+
+		result := json.RawMessage(`{"message_id": 888, "date": 1234567, "chat": {"id": 12345}}`)
+		if strings.HasSuffix(r.URL.Path, "/deleteMessage") {
+			result = json.RawMessage(`true`)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(tgbotapi.APIResponse{Ok: true, Result: result})
+	})
+	defer server.Close()
+
+	msgID, err := tg.SendMessageReminder("telegram", 15, 60, 777)
+	if err != nil {
+		t.Fatalf("SendMessageReminder failed: %v", err)
+	}
+	if msgID != 888 {
+		t.Errorf("expected msgID 888, got %d", msgID)
+	}
+	if len(paths) != 2 || !strings.HasSuffix(paths[0], "/sendMessage") || !strings.HasSuffix(paths[1], "/deleteMessage") {
+		t.Fatalf("expected sendMessage then deleteMessage, got %v", paths)
+	}
+	for _, want := range []string{"Задача идёт", "telegram", "15 из 60 мин", "t_pause:telegram", "t_stop:telegram"} {
+		if !strings.Contains(bodies[0], want) {
+			t.Errorf("expected reminder to contain %q, body: %s", want, bodies[0])
+		}
+	}
+	if !strings.Contains(bodies[1], "message_id=777") {
+		t.Errorf("expected the previous card 777 to be deleted, body: %s", bodies[1])
+	}
+}

@@ -16,4 +16,7 @@ type RunningTask struct {
 	TelegramMessageID int       `bson:"telegram_message_id,omitempty" json:"telegram_message_id,omitempty"`
 	SourceDevice      string    `bson:"source_device,omitempty" json:"source_device,omitempty"` // client that started the task
 	DebtShare         int       `bson:"debt_share,omitempty" json:"debt_share,omitempty"`       // % of the session sent to the task's past debt on stop
+	RunClient         string    `bson:"run_client,omitempty" json:"run_client,omitempty"`       // client that started or last resumed the run
+	ReminderAt        time.Time `bson:"reminder_at,omitempty" json:"reminder_at,omitempty"`     // last "still running" reminder
+	ReminderMessageID int       `bson:"reminder_message_id,omitempty" json:"reminder_message_id,omitempty"`
 }

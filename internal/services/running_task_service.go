@@ -163,6 +163,7 @@ func (s *RunningTaskService) StartWith(opts StartOptions) (entity.RunningTask, e
 		existing.StartTime = now
 		existing.LastHeartbeatAt = now
 		existing.IsRunning = true
+		existing.RunClient = opts.Client
 		if existing.TargetDuration > 0 {
 			remainingMin := existing.TargetDuration - existing.Accumulated
 			if remainingMin > 0 {
@@ -200,6 +201,7 @@ func (s *RunningTaskService) StartWith(opts StartOptions) (entity.RunningTask, e
 		TargetDuration:  targetDuration,
 		SourceDay:       sourceDay,
 		SourceDevice:    opts.Client,
+		RunClient:       opts.Client,
 		DebtShare:       clampShare(opts.DebtShare),
 	}
 
@@ -416,6 +418,12 @@ func (s *RunningTaskService) stopLocked(taskName string, reasons ...string) (ent
 		}
 	}
 
+	if s.nt != nil && task.ReminderMessageID != 0 {
+		if err := s.nt.DeleteMessage(task.ReminderMessageID); err != nil {
+			slog.Warn("RunningTaskService: failed to delete reminder card", "task", task.TaskName, "error", err)
+		}
+	}
+
 	if task.TargetDuration > 0 && record.TimeDuration >= task.TargetDuration {
 		_ = s.st.TimeListDelDB(task.TargetDuration)
 	}
@@ -492,7 +500,9 @@ func (s *RunningTaskService) Pause(taskName string, reasons ...string) (entity.R
 	return task, nil
 }
 
-func (s *RunningTaskService) Resume(taskName string) (entity.RunningTask, error) {
+// Resume continues a paused task. client is the resuming client: it decides whether the run
+// is held to the heartbeat lease (HeartbeatExempt).
+func (s *RunningTaskService) Resume(taskName, client string) (entity.RunningTask, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -545,6 +555,7 @@ func (s *RunningTaskService) Resume(taskName string) (entity.RunningTask, error)
 	task.StartTime = now
 	task.LastHeartbeatAt = now
 	task.IsRunning = true
+	task.RunClient = client
 
 	if task.TargetDuration > 0 {
 		remainingMin := task.TargetDuration - task.Accumulated
