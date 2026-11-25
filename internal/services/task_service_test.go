@@ -14,7 +14,6 @@ type mockTaskStorage struct {
 	getParamsErr    error
 	schedule        entity.WeeklySchedule
 	scheduleErr     error
-	dayRecords      map[string]int
 	setParamsCalled bool
 	lastSetParams   entity.TaskParams
 	setParamsErr    error
@@ -23,7 +22,6 @@ type mockTaskStorage struct {
 func newMockTaskStorage() *mockTaskStorage {
 	return &mockTaskStorage{
 		taskParams: make(map[string]entity.TaskParams),
-		dayRecords: make(map[string]int),
 	}
 }
 
@@ -57,10 +55,6 @@ func (m *mockTaskStorage) GetActiveSchedule() (entity.WeeklySchedule, error) {
 
 func (m *mockTaskStorage) GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error) {
 	return 0, nil
-}
-
-func (m *mockTaskStorage) GetDayTaskRecord(taskName string) (int, error) {
-	return m.dayRecords[taskName], nil
 }
 
 type mockTaskNotify struct{}
@@ -223,19 +217,5 @@ func TestSetTaskParams(t *testing.T) {
 	}
 	if st.lastSetParams != input {
 		t.Errorf("expected %+v, got %+v", input, st.lastSetParams)
-	}
-}
-
-func TestGetDayTaskRecord(t *testing.T) {
-	st := newMockTaskStorage()
-	st.dayRecords["reading"] = 120
-	svc := NewTaskService(st, &mockTaskNotify{})
-
-	val, err := svc.GetDayTaskRecord("reading")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if val != 120 {
-		t.Errorf("expected 120, got %d", val)
 	}
 }

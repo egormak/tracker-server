@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 	"tracker-server/internal/api/middleware"
 	"tracker-server/internal/domain/entity"
 	"tracker-server/internal/services"
@@ -21,7 +20,6 @@ type taskRecordService interface {
 	GetTaskPlanPercent() (entity.PlanPercentResponse, error)
 	GetTaskPlanPercentWithSchedule(scheduleService services.ScheduleServiceProvider) (entity.PlanPercentResponse, error)
 	GetTaskByNameSchedule(taskName string, scheduleService services.ScheduleServiceProvider) (entity.PlanPercentResponse, error)
-	GetRecords() ([]entity.TaskRecord, error)
 	CleanRecords()
 	RotatePlanPercent() error
 }
@@ -205,46 +203,6 @@ func (t *TaskRecordHandler) ChangeGroupPlanPercent(c *fiber.Ctx) error {
 	return c.Status(200).JSON(&fiber.Map{
 		"status": "accept",
 	})
-}
-
-// ShowRecords returns a JSON response with task records for today, yesterday, and all time (legacy endpoint for web UI)
-func (t *TaskRecordHandler) ShowRecords(c *fiber.Ctx) error {
-	// Get today's and yesterday's dates in the required format
-	today := time.Now().Format("2 January 2006")
-	yesterday := time.Now().AddDate(0, 0, -1).Format("2 January 2006")
-
-	// Retrieve task records from the service
-	records, err := t.srv.GetRecords()
-	if err != nil {
-		return c.Status(500).JSON(&fiber.Map{
-			"status":  "error",
-			"message": err.Error(),
-		})
-	}
-
-	// Initialize maps to store task records for today, yesterday, and all time
-	taskRecordsToday := make(map[string]int)
-	taskRecordsYesterday := make(map[string]int)
-	taskRecordsAll := make(map[string]int)
-
-	// Iterate over the records and update the corresponding maps based on the date
-	for _, v := range records {
-		if v.Date == today {
-			taskRecordsToday[v.Name] += v.TimeDuration
-		} else if v.Date == yesterday {
-			taskRecordsYesterday[v.Name] += v.TimeDuration
-		}
-		taskRecordsAll[v.Name] += v.TimeDuration
-	}
-
-	// Create a response map with task records for today, yesterday, and all time
-	answer := map[string]map[string]int{
-		"today":     taskRecordsToday,
-		"yesterday": taskRecordsYesterday,
-		"all":       taskRecordsAll,
-	}
-
-	return c.JSON(answer)
 }
 
 // CleanRecords cleans all records (dev endpoint)

@@ -24,10 +24,6 @@ tags:
     description: Previous days' unfinished schedule of the current week
   - name: Statistics
     description: Statistical information
-  - name: Role
-    description: Role management
-  - name: Timer
-    description: Timer operations
   - name: Management
     description: System management operations
   - name: Schedule
@@ -70,52 +66,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DashboardStateResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/stats/done/today:
-    get:
-      tags:
-        - Statistics
-      summary: Get today's completion statistics
-      description: Get time completed for today
-      operationId: getStatsDoneToday
-      responses:
-        '200':
-          description: Successfully retrieved today's task results
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/TaskResult"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/stats/tasks/today:
-    get:
-      tags:
-        - Statistics
-      summary: Get today's tasks (planned vs done)
-      description: Alias of /api/v1/stats/done/today; returns TaskResult list
-      operationId: getStatsTasksToday
-      responses:
-        '200':
-          description: Successfully retrieved today's task results
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/TaskResult"
         '500':
           description: Internal server error
           content:
@@ -603,100 +553,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/timer/set:
-    post:
-      tags:
-        - Timer
-      summary: Set timer
-      description: Set a timer with a specific count
-      operationId: setTimer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TimerSetRequest"
-      responses:
-        '200':
-          description: Timer set successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/timer/get:
-    get:
-      tags:
-        - Timer
-      summary: Get timer
-      description: Get the current timer duration
-      operationId: getTimer
-      responses:
-        '200':
-          description: Timer retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TimerResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/tasklist:
-    get:
-      tags:
-        - Task
-      summary: Get task list
-      description: Get a list of all tasks
-      operationId: getTaskList
-      responses:
-        '200':
-          description: Task list retrieved successfully
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/TaskResult"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/roles/records:
-    get:
-      tags:
-        - Role
-      summary: Get role records
-      description: Get records for all roles
-      operationId: getRoleRecords
-      responses:
-        '200':
-          description: Role records retrieved successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties:
-                  type: integer
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /api/v1/manage/telegram/start:
     post:
       tags:
@@ -1137,34 +993,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/timer/del:
-    post:
-      deprecated: true
-      tags:
-        - Timer
-      summary: Delete timer entries
-      description: Decrease timer entries by count
-      operationId: deleteTimer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TimerSetRequest"
-      responses:
-        '200':
-          description: Timer decreased successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /api/v1/task/percent:
     get:
       deprecated: true
@@ -1214,56 +1042,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/record/task-day:
-    get:
-      deprecated: true
-      tags:
-        - TaskRecord
-      summary: Get today's duration for a task
-      operationId: getTaskDayDuration
-      parameters:
-        - name: task_name
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Duration retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TaskDayDurationResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   # REMOVED: /api/v1/record POST - Use /api/v1/taskrecord instead
   # The legacy endpoint has been removed. Use /api/v1/taskrecord for adding task records.
-
-  /api/v1/records:
-    get:
-      deprecated: true
-      tags:
-        - TaskRecord
-      summary: Get records summary (today/yesterday/all)
-      operationId: getRecordsSummary
-      responses:
-        '200':
-          description: Summary retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RecordsSummaryResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/records/clean:
     post:
@@ -1302,72 +1082,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/roles/records/today:
-    get:
-      tags:
-        - Role
-      summary: Get today's done time across roles
-      operationId: getRolesRecordsToday
-      responses:
-        '200':
-          description: Aggregated time done
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RoleTimeDoneResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/role/recheck:
-    get:
-      tags:
-        - Role
-      summary: Recompute roles (maintenance)
-      operationId: recheckRole
-      responses:
-        '200':
-          description: Recheck started
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/role/get:
-    get:
-      tags:
-        - Role
-      summary: Get role for a task
-      operationId: getTaskRole
-      parameters:
-        - name: task_name
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Role retrieved
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RoleGetResponse"
         '500':
           description: Internal server error
           content:
@@ -1510,43 +1224,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/v1/manage/timer/global:
-    get:
-      tags:
-        - Management
-      summary: Get global timer
-      operationId: getGlobalTimer
-      responses:
-        '200':
-          description: Current global timer
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TimerGlobalResponse"
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    post:
-      tags:
-        - Management
-      summary: Set global timer
-      operationId: setGlobalTimer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TimerGlobalSetRequest"
-      responses:
-        '200':
-          description: Timer set
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
   /api/v1/timer/run/start:
     post:
       tags:
@@ -2002,36 +1679,6 @@ components:
       example:
         task_name: "Programming"
 
-    TaskDayDurationResponse:
-      type: object
-      properties:
-        status:
-          type: string
-        task_duration:
-          type: integer
-      required:
-        - status
-        - task_duration
-      example:
-        status: "Done"
-        task_duration: 45
-
-    RecordsSummaryResponse:
-      type: object
-      properties:
-        today:
-          type: object
-          additionalProperties:
-            type: integer
-        yesterday:
-          type: object
-          additionalProperties:
-            type: integer
-        all:
-          type: object
-          additionalProperties:
-            type: integer
-
     SetTaskParamsRequest:
       type: object
       properties:
@@ -2045,30 +1692,6 @@ components:
         - name
         - time_duration
         - priority
-
-    RoleTimeDoneResponse:
-      type: object
-      properties:
-        time_done:
-          type: integer
-      required:
-        - time_done
-      example:
-        time_done: 180
-
-    RoleGetResponse:
-      type: object
-      properties:
-        status:
-          type: string
-        role:
-          type: string
-      required:
-        - status
-        - role
-      example:
-        status: "accept"
-        role: "work"
 
     ManageProcentsRequest:
       type: object
@@ -2148,24 +1771,6 @@ components:
         - learn
         - rest
 
-    TimerGlobalResponse:
-      type: object
-      properties:
-        timer_global:
-          type: integer
-      required:
-        - timer_global
-      example:
-        timer_global: 5
-
-    TimerGlobalSetRequest:
-      type: object
-      properties:
-        time_scheduler:
-          type: integer
-      required:
-        - time_scheduler
-
     TaskRecordRequest:
       type: object
       properties:
@@ -2228,28 +1833,6 @@ components:
       example:
         task_name: "Programming"
         role: "learn"
-
-    TimerSetRequest:
-      type: object
-      properties:
-        count:
-          type: integer
-          description: Timer count
-      required:
-        - count
-      example:
-        count: 10
-
-    TimerResponse:
-      type: object
-      properties:
-        time_duration:
-          type: integer
-          description: Timer duration in minutes
-      required:
-        - time_duration
-      example:
-        time_duration: 25
 
     TaskResult:
       type: object

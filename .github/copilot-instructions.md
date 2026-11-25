@@ -121,7 +121,6 @@ See `openapi.yml` for the complete API contract.
 - `POST /api/v1/taskrecord` - Add task time record
 - `GET /api/v1/task/plan/percent` - Get next task by plan percentage
 - `GET /api/v1/task/plan/percent/schedule` - Schedule-aware next task
-- `GET /api/v1/stats/done/today` - Today's task completion stats
 - `GET /api/v1/stats/weekly` - Current week task and role statistics
 - `POST /api/v1/timer/run/start` - Start running task timer
 - `POST /api/v1/timer/run/stop` - Stop running task and record elapsed time

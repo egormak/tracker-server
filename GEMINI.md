@@ -26,10 +26,9 @@ The API is versioned under `/api/v1/`. Key route groups:
 - **Debt**: `GET /api/v1/debt` (previous days' debt this week, today's remainder, week strip)
 - **Ramp Warm-up**: `/api/v1/ramp/status`, `/api/v1/ramp/reset`, `/api/v1/ramp/advance`, `/api/v1/ramp/config`
 - **Schedule**: `/api/v1/schedule/...` (CRUD, active, rollover, today, apply, task-time adjustment)
-- **Statistics**: `/api/v1/stats/done/today`, `/api/v1/stats/tasks/today`, `/api/v1/stats/weekly`, `/api/v1/tasklist`
+- **Statistics**: `/api/v1/stats/weekly`, `/api/v1/stats/weekly/digest`
 - **Running Task Timer & WebSocket**: `/api/v1/timer/run/...` (start, stop, pause, resume, adjust, status, list, heartbeat) and `/api/v1/timer/ws`
 - **Evening Focus Mode**: `/api/v1/mode/evening-focus`, `/api/v1/mode/evening-focus/skip`
-- **Roles & Legacy Timers**: `/api/v1/roles/...`, `/api/v1/timer/get`, `/api/v1/timer/set`, `/api/v1/timer/del`, `/api/v1/manage/timer/global`
 
 Refer to `openapi.yml` for the definitive OpenAPI 3.0 specification.
 

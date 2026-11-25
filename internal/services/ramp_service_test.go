@@ -439,10 +439,7 @@ func (m *mockTaskRecordStorageForRamp) GetTaskDurationForDate(t string, d string
 	return 0, nil
 }
 func (m *mockTaskRecordStorageForRamp) IsTaskStrict(t string) (bool, error) { return false, nil }
-func (m *mockTaskRecordStorageForRamp) GetRecords() ([]entity.TaskRecord, error) {
-	return m.records, nil
-}
-func (m *mockTaskRecordStorageForRamp) CleanRecords() {}
+func (m *mockTaskRecordStorageForRamp) CleanRecords()                       {}
 
 type mockRampRecalculator struct {
 	called   bool

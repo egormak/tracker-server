@@ -131,5 +131,4 @@ Refer to `openapi.yml` for the complete OpenAPI 3.0 specification.
 - **Plan Percents**:
   - `GET /api/v1/manage/plan-percents`, `DELETE /api/v1/manage/plan-percents/:group/:value`
 - **Statistics**:
-  - `GET /api/v1/stats/done/today`, `GET /api/v1/stats/tasks/today`, `GET /api/v1/stats/weekly`
-  - `GET /api/v1/tasklist`
+  - `GET /api/v1/stats/weekly`, `GET /api/v1/stats/weekly/digest`

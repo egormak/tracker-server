@@ -12,7 +12,6 @@ type TaskStorage interface {
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	GetActiveSchedule() (entity.WeeklySchedule, error)
 	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
-	GetDayTaskRecord(taskName string) (int, error)
 }
 
 type TaskNotify interface {
@@ -131,8 +130,4 @@ func getDayScheduleFromWeekly(schedule entity.WeeklySchedule, day string) entity
 	default:
 		return entity.DaySchedule{}
 	}
-}
-
-func (t *TaskService) GetDayTaskRecord(taskName string) (int, error) {
-	return t.st.GetDayTaskRecord(taskName)
 }

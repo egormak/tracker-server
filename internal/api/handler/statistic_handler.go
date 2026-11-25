@@ -13,7 +13,6 @@ type StatisticService interface {
 	GetTaskRecordToday() ([]entity.TaskResult, error)
 	GetWeeklyStats() (entity.WeeklyStatsResponse, error)
 	GetWeeklyDigest(week string) (entity.WeeklyDigest, error)
-	ShowTaskList() ([]entity.TaskResult, error)
 }
 
 type RunningTaskProvider interface {
@@ -76,40 +75,6 @@ func (s *StatisticHandler) GetWeeklyDigest(c *fiber.Ctx) error {
 	}
 
 	return c.Status(200).JSON(digest)
-}
-
-// TODO: Finish this function
-func (s *StatisticHandler) StatCompletionTimeDone(c *fiber.Ctx) error {
-	slog.Info("Get request StatCompletionTimeDone")
-
-	// var answer StatisticCompletion
-
-	statsData, err := s.srv.GetTaskRecordToday()
-	if err != nil {
-		return c.Status(500).JSON(&fiber.Map{
-			"status":  "error",
-			"message": err.Error(),
-		})
-	}
-
-	return c.Status(200).JSON(statsData)
-
-}
-
-// ShowTaskList returns today's tasks with scheduled time and actual time done (legacy endpoint)
-func (s *StatisticHandler) ShowTaskList(c *fiber.Ctx) error {
-	slog.Info("Get request ShowTaskList")
-
-	taskList, err := s.srv.ShowTaskList()
-	if err != nil {
-		slog.Error("Failed to get task list", "err", err)
-		return c.Status(500).JSON(&fiber.Map{
-			"status":  "error",
-			"message": err.Error(),
-		})
-	}
-
-	return c.Status(200).JSON(taskList)
 }
 
 // GetDashboardState aggregates running task, today's tasks and evening focus in a single response

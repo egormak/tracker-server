@@ -16,7 +16,6 @@ import (
 type mockTaskService struct {
 	getTaskParamsFunc func(taskName string) (entity.TaskParams, error)
 	setTaskParamsFunc func(params entity.TaskParams) error
-	getDayRecordFunc  func(taskName string) (int, error)
 }
 
 func (m *mockTaskService) GetTaskParams(taskName string) (entity.TaskParams, error) {
@@ -31,13 +30,6 @@ func (m *mockTaskService) SetTaskParams(params entity.TaskParams) error {
 		return m.setTaskParamsFunc(params)
 	}
 	return nil
-}
-
-func (m *mockTaskService) GetDayTaskRecord(taskName string) (int, error) {
-	if m.getDayRecordFunc != nil {
-		return m.getDayRecordFunc(taskName)
-	}
-	return 0, nil
 }
 
 func TestTaskHandler_TaskParams(t *testing.T) {

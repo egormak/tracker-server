@@ -13,30 +13,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func (s *Storage) GetRecords() ([]entity.TaskRecord, error) {
-
-	var taskRecords []entity.TaskRecord
-
-	coll := s.Client.Database(dbName).Collection(tasksList)
-	cursor, err := coll.Find(s.Context, bson.D{})
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(s.Context)
-
-	for cursor.Next(s.Context) {
-		// Declare a result BSON object
-		var taskRecord entity.TaskRecord
-		err := cursor.Decode(&taskRecord)
-		if err != nil {
-			return nil, err
-		}
-		taskRecords = append(taskRecords, taskRecord)
-	}
-
-	return taskRecords, nil
-}
-
 func (s *Storage) CleanRecords() {
 	database := s.Client.Database(dbName)
 
@@ -306,33 +282,6 @@ func (s *Storage) IsTaskStrict(taskName string) (bool, error) {
 	}
 
 	return result.TimeStrictly, nil
-}
-
-func (s *Storage) GetDayTaskRecord(taskName string) (int, error) {
-
-	// Set Value for DB
-	database := s.Client.Database(dbName)
-	coll := database.Collection(tasksList)
-	var taskResult int
-
-	cursor, err := coll.Find(s.Context, bson.M{"name": taskName, "date": time.Now().Format("2 January 2006")})
-	if err != nil {
-		return 0, fmt.Errorf("get-day-task-record: %w", err)
-	}
-	defer cursor.Close(s.Context)
-
-	for cursor.Next(s.Context) {
-		// Declare a result BSON object
-		var result entity.TaskRecord
-		err := cursor.Decode(&result)
-		if err != nil {
-			return 0, fmt.Errorf("get-day-task-record: %w", err)
-		}
-		taskResult += result.TimeDuration
-	}
-
-	return taskResult, nil
-
 }
 
 func (s *Storage) GetTasksbyPriority(groupName string) ([]entity.TaskDefinition, error) {

@@ -47,8 +47,6 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	runningTaskHandler := handler.NewRunningTaskHandler(runningTaskService, hub)
 	eveningHandler := handler.NewEveningHandler(eveningService)
 	debtHandler := handler.NewDebtHandler(debtService)
-	roleHandler := handler.NewRoleHandler(mongoconn, notify)
-	legacyTimerHandler := handler.NewLegacyTimerHandler(mongoconn)
 	telegramHandler := handler.NewTelegramHandler(notify)
 
 	// Routes
@@ -61,7 +59,6 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	// Task
 	api.Get("/v1/task/params", taskHandler.TaskParams)
 	api.Post("/v1/task/params", taskHandler.SetTaskParams)
-	api.Get("/v1/record/task-day", taskHandler.GetDayTaskRecord) // Legacy endpoint for CLI
 
 	// TaskRecords
 	api.Post("/v1/taskrecord", taskRecordHandler.AddRecord)
@@ -83,11 +80,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/manage/task/create", manageHandler.CreateTask)
 
 	// Statistics
-	api.Get("/v1/stats/done/today", statsHandler.StatCompletionTimeDone)
-	api.Get("/v1/stats/tasks/today", statsHandler.StatCompletionTimeDone)
 	api.Get("/v1/stats/weekly", statsHandler.GetWeeklyStats)
 	api.Get("/v1/stats/weekly/digest", statsHandler.GetWeeklyDigest)
-	api.Get("/v1/tasklist", statsHandler.ShowTaskList) // Legacy endpoint for CLI and web UI
 
 	// Plan Percents
 	api.Get("/v1/manage/plan-percents", manageHandler.GetPlanPercents)                    // New route for plan percents
@@ -95,22 +89,8 @@ func RegisterRoutes(app *fiber.App, mongoconn storage.Storage, notify notify.Not
 	api.Post("/v1/manage/procents", manageHandler.ProcentsSet)
 	api.Get("/v1/manage/procents", manageHandler.GetPlanProcentsLegacy)
 
-	// Legacy Countdown & Global Timers
-	api.Post("/v1/timer/set", legacyTimerHandler.TimerSet)
-	api.Get("/v1/timer/get", legacyTimerHandler.TimerGet)
-	api.Post("/v1/timer/del", legacyTimerHandler.TimerDel)
-	api.Post("/v1/manage/timer/global", legacyTimerHandler.TimerGlobalSet)
-	api.Get("/v1/manage/timer/global", legacyTimerHandler.TimerGlobalGet)
-
 	// Records
-	api.Get("/v1/records", taskRecordHandler.ShowRecords)
 	api.Post("/v1/records/clean", taskRecordHandler.CleanRecords)
-
-	// Roles
-	api.Get("/v1/roles/records", roleHandler.ShowRolesRecords)
-	api.Get("/v1/roles/records/today", roleHandler.StatCompletionTimeDone)
-	api.Get("/v1/role/recheck", roleHandler.RecheckRole)
-	api.Get("/v1/role/get", roleHandler.TaskRoleGet)
 
 	// Telegram
 	api.Post("/v1/manage/telegram/start", telegramHandler.TelegramSendStart)

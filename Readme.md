@@ -82,7 +82,7 @@ make docker-build TAG=2026-09-27
 ## Common API Endpoints
 See `openapi.yml` for the full specification.
 - **Dashboard:** `GET /api/v1/dashboard/state`
-- **Stats:** `GET /api/v1/stats/done/today`, `GET /api/v1/stats/weekly`
+- **Stats:** `GET /api/v1/stats/weekly`, `GET /api/v1/stats/weekly/digest`
 - **Plan:** `GET /api/v1/task/plan/percent`, `GET /api/v1/task/plan/percent/schedule`
 - **Records:** `POST /api/v1/taskrecord`
 - **Running Task:** `POST /api/v1/timer/run/start`, `POST /api/v1/timer/run/stop`, `POST /api/v1/timer/run/heartbeat`, `GET /api/v1/timer/ws`

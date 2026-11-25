@@ -25,7 +25,6 @@ type TaskRecordStorage interface {
 	GetActiveSchedule() (entity.WeeklySchedule, error)
 	GetTaskDurationForDate(taskName string, date string, sourceDay string) (int, error)
 	IsTaskStrict(taskName string) (bool, error)
-	GetRecords() ([]entity.TaskRecord, error)
 	CleanRecords()
 }
 
@@ -356,10 +355,6 @@ func (s *TaskRecordService) GetTodayTaskTimeLeft(taskName string) (int, error) {
 	taskTimeLeft := taskParams.Time - timeDuration
 
 	return taskTimeLeft, nil
-}
-
-func (s *TaskRecordService) GetRecords() ([]entity.TaskRecord, error) {
-	return s.st.GetRecords()
 }
 
 // SetBeforeClean registers a hook that runs right before the records are wiped.

@@ -6,69 +6,8 @@ import (
 	"tracker-server/internal/storage"
 
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
-// TimeListSetDB populates the "Day List" document in the database with a new DayList struct.
-// The count parameter determines the size of the ListTime slice in the DayList struct.
-// If the document doesn't exist, it will be created.
-func (s *Storage) TimeListSetDB(count int) error {
-	// Create a new DayList struct with the given count
-	result := storage.DayList{
-		Title:    "Day List",
-		Count:    count,
-		ListTime: make([]int, count),
-	}
-
-	// Populate the ListTime slice with values from 1 to count
-	for i := 0; i < count; i++ {
-		result.ListTime[i] = i + 1
-	}
-
-	// Get the database and collection
-	database := s.Client.Database(dbName)
-	coll := database.Collection(taskInfo)
-
-	// Define the filter to find the document with title "Day List"
-	filter := bson.D{{Key: "title", Value: "Day List"}}
-
-	// Define the update with the new DayList struct
-	update := bson.D{{Key: "$set", Value: result}}
-
-	// Set the options to upsert the document if it doesn't exist
-	opts := options.Update().SetUpsert(true)
-
-	// Update the document with the new DayList struct
-	_, err := coll.UpdateOne(s.Context, filter, update, opts)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *Storage) TimeListGetDB() ([]int, error) {
-
-	// Set Value
-	var result storage.DayList
-
-	// Get the database and collection
-	database := s.Client.Database(dbName)
-	coll := database.Collection(taskInfo)
-
-	//Check if Exists Document
-	err := coll.FindOne(s.Context, bson.D{{Key: "title", Value: "Day List"}}).Decode(&result)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(result.ListTime) == 0 {
-		return nil, storage.ErrListEmpty
-	}
-
-	return result.ListTime, nil
-}
 
 func (s *Storage) TimeListDelDB(timeDuretion int) error {
 
@@ -100,52 +39,6 @@ func (s *Storage) TimeListDelDB(timeDuretion int) error {
 		return err
 	}
 	return nil
-}
-
-func (s *Storage) TimeDurationGet() (int, error) {
-
-	var timeValue int
-
-	// Get Time
-	timeList, err := s.TimeListGetDB()
-	if err != nil {
-		// MongoDocument is not exist
-		if err == mongo.ErrNoDocuments {
-
-			s.TimeListSetDB(1)
-			timeList, err = s.TimeListGetDB()
-			if err != nil {
-				return 0, err
-			}
-		} else if err == storage.ErrListEmpty {
-			count := s.TimeListCountGetDB()
-			s.TimeListSetDB(count + 1)
-			timeList, err = s.TimeListGetDB()
-			if err != nil {
-
-				return 0, err
-			}
-		}
-	}
-
-	timeValue = timeList[0]
-
-	return timeValue, nil
-}
-
-func (s *Storage) TimeListCountGetDB() int {
-
-	// Set Value
-	var result storage.DayList
-
-	// Get the database and collection
-	database := s.Client.Database(dbName)
-	coll := database.Collection(taskInfo)
-
-	//Check if Exists Document
-	coll.FindOne(s.Context, bson.D{{Key: "title", Value: "Day List"}}).Decode(&result)
-
-	return result.Count
 }
 
 // Get the total time that was spent
@@ -208,23 +101,4 @@ func (s *Storage) TimerGlobalSet(timeScheduler int, date ...string) error {
 	}
 
 	return nil
-}
-
-func (s *Storage) TimerGlobalGet() (int, error) {
-
-	// Get the database and collection
-	database := s.Client.Database(dbName)
-	coll := database.Collection(taskInfo)
-
-	var result storage.SchedulerInfo
-
-	err := coll.FindOne(s.Context, bson.D{{Key: "name", Value: "Scheduler"}}).Decode(&result)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			// No global timer configured yet; treat as zero instead of 500-ing
-			return 0, nil
-		}
-		return 0, err
-	}
-	return result.ScheduleAll, nil
 }

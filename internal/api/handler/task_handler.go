@@ -11,7 +11,6 @@ import (
 type taskService interface {
 	GetTaskParams(taskName string) (entity.TaskParams, error)
 	SetTaskParams(params entity.TaskParams) error
-	GetDayTaskRecord(taskName string) (int, error)
 }
 
 type TaskHandler struct {
@@ -91,23 +90,5 @@ func (t *TaskHandler) SetTaskParams(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":  "success",
 		"message": "task params updated successfully",
-	})
-}
-
-// GetDayTaskRecord returns the total time spent on a task today (legacy endpoint for CLI)
-func (t *TaskHandler) GetDayTaskRecord(c *fiber.Ctx) error {
-	taskName := c.Query("task_name")
-
-	result, err := t.srv.GetDayTaskRecord(taskName)
-	if err != nil {
-		return c.Status(500).JSON(&fiber.Map{
-			"status":  "error",
-			"message": err.Error(),
-		})
-	}
-
-	return c.Status(200).JSON(&fiber.Map{
-		"status":        "Done",
-		"task_duration": result,
 	})
 }

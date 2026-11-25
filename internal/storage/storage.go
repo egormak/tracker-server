@@ -6,23 +6,15 @@ import (
 )
 
 type Storage interface {
-	GetRecords() ([]entity.TaskRecord, error)
 	GetRecordsForDates(dates []string) ([]entity.TaskRecord, error)
 	GetRecordsForDatesOrSourceDays(dates []string, sourceDays []string) ([]entity.TaskRecord, error)
-	GetDayTaskRecord(taskName string) (int, error)
-	StatisticRolesGet() ([]entity.RoleRecord, error)
-	StatisticRolesGetToday() ([]entity.RoleRecord, error)
 	ShowTaskList() ([]entity.TaskResult, error)
 	SetTaskParams(params entity.TaskParams) error
 	GetTaskParams(taskName string) (entity.TaskParams, error)
-	RecheckRole() error
 	CleanRecords()
-	TimeListSetDB(count int) error
 	TimeListDelDB(timeDuretion int) error
 	TimeTasks() (int, error)
 	TimerGlobalSet(timeScheduler int, date ...string) error
-	TimerGlobalGet() (int, error)
-	TimeDurationGet() (int, error)
 	AddTaskRecord(task entity.TaskRecord) error
 	AddRoleMinutes(task entity.TaskRecord) error
 	GetRole(taskName string) (string, error)
