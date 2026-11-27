@@ -203,14 +203,17 @@ func (h *RunningTaskHandler) WebSocketHandler() fiber.Handler {
 			return
 		}
 
-		h.hub.Register(c)
+		// Every write to this connection goes through client: the hub broadcasts to it too.
+		client := realtime.NewClient(c)
+		h.hub.Register(client)
 		defer func() {
-			h.hub.Unregister(c)
+			h.hub.Unregister(client)
+			client.Release()
 		}()
 
 		// Send initial state sync immediately upon connection
 		tasks, _ := h.service.GetAllTasks()
-		_ = c.WriteJSON(realtime.Event{
+		_ = client.SendJSON(realtime.Event{
 			Type:       realtime.EventStateSync,
 			ServerTime: time.Now().UnixMilli(),
 			Data:       tasks,
@@ -229,7 +232,7 @@ func (h *RunningTaskHandler) WebSocketHandler() fiber.Handler {
 			if json.Unmarshal(message, &msg) == nil {
 				if msg.Type == "heartbeat" || msg.Type == "HEARTBEAT" {
 					task, _ := h.service.Heartbeat(msg.TaskName)
-					_ = c.WriteJSON(realtime.Event{
+					_ = client.SendJSON(realtime.Event{
 						Type:       realtime.EventHeartbeatAck,
 						TaskName:   task.TaskName,
 						Role:       task.Role,

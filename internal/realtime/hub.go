@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/gofiber/websocket/v2"
 )
 
 type EventType string
@@ -33,18 +31,18 @@ type Event struct {
 }
 
 type Hub struct {
-	clients    map[*websocket.Conn]bool
-	register   chan *websocket.Conn
-	unregister chan *websocket.Conn
+	clients    map[*Client]bool
+	register   chan *Client
+	unregister chan *Client
 	broadcast  chan Event
 	mu         sync.RWMutex
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[*websocket.Conn]bool),
-		register:   make(chan *websocket.Conn),
-		unregister: make(chan *websocket.Conn),
+		clients:    make(map[*Client]bool),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
 		broadcast:  make(chan Event, 256),
 	}
 }
@@ -79,12 +77,12 @@ func (h *Hub) Run() {
 
 			h.mu.RLock()
 			for client := range h.clients {
-				err := client.WriteMessage(websocket.TextMessage, data)
+				err := client.SendText(data)
 				if err != nil {
 					slog.Warn("Realtime Hub: error writing to client, scheduling unregister", "error", err)
 					client.Close()
 					// We unregister in a separate goroutine or handle on next lock
-					go func(c *websocket.Conn) {
+					go func(c *Client) {
 						h.Unregister(c)
 					}(client)
 				}
@@ -94,12 +92,13 @@ func (h *Hub) Run() {
 	}
 }
 
-func (h *Hub) Register(conn *websocket.Conn) {
-	h.register <- conn
+func (h *Hub) Register(c *Client) {
+	h.register <- c
 }
 
-func (h *Hub) Unregister(conn *websocket.Conn) {
-	h.unregister <- conn
+// Unregister removes c and closes its connection. Unregistering an unknown client is a no-op.
+func (h *Hub) Unregister(c *Client) {
+	h.unregister <- c
 }
 
 func (h *Hub) Broadcast(event Event) {
